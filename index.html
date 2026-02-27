@@ -1,0 +1,3264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="description" content="Carnet de notes personnel avec séances vocales">
+
+<!-- PWA / iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mat's Notes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<!-- Manifest & Favicon -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+
+<title>Mat's Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyA0WhqOv1UpODz8gWltUGCj4a2QWI-M7gQ",
+    authDomain: "mats-notes.firebaseapp.com",
+    projectId: "mats-notes",
+    storageBucket: "mats-notes.firebasestorage.app",
+    messagingSenderId: "758814265531",
+    appId: "1:758814265531:web:5b4702b659f258b595599e"
+};
+
+const fbApp  = initializeApp(firebaseConfig);
+const fbAuth = getAuth(fbApp);
+const fbDb   = getFirestore(fbApp);
+
+// Expose sur window pour les fonctions globales
+window._fb = { fbAuth, fbDb, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp };
+
+// Surveiller l'état de connexion
+onAuthStateChanged(fbAuth, user => {
+    if (typeof window.onAuthChange === 'function') window.onAuthChange(user);
+});
+</script>
+
+<style>
+    :root {
+        --bg: #0f0f0f;
+        --surface: #1a1a1a;
+        --surface2: #222;
+        --border: #2e2e2e;
+        --text: #f0ece6;
+        --text-muted: #888;
+        --accent: #d4a853;
+        --accent2: #e8c47a;
+        --danger: #e05454;
+        --radius: 14px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        font-family: 'DM Sans', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body::before {
+        content: ''; position: fixed; inset: 0;
+        background:
+            radial-gradient(ellipse 60% 50% at 80% 10%, rgba(212,168,83,0.06) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 40% at 10% 80%, rgba(212,168,83,0.04) 0%, transparent 60%);
+        pointer-events: none; z-index: 0;
+    }
+
+    /* --- Header --- */
+    header {
+        position: sticky; top: 0; z-index: 100;
+        height: 52px;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 12px;
+        background: rgba(15,15,15,0.92);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border);
+        gap: 8px; min-width: 0;
+    }
+
+    .header-brand { display: flex; align-items: baseline; gap: 0; flex-shrink: 0; }
+    .brand-mat { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 900; color: var(--accent); }
+    .brand-notes { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 400; color: var(--text); }
+    .brand-dot { color: var(--accent); font-size: 1.1rem; }
+
+    .header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+
+    /* Boutons icône header */
+    .hbtn-icon {
+        background: var(--surface); border: 1px solid var(--border); color: var(--text);
+        border-radius: 9px; width: 34px; height: 34px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.18s; font-size: 1rem; position: relative;
+        flex-shrink: 0;
+    }
+    .hbtn-icon:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+    .hbtn-icon.active { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
+
+    /* Dropdown générique */
+    .dropdown { position: relative; }
+    .dropdown-menu {
+        position: absolute; top: calc(100% + 8px); right: 0; z-index: 300;
+        background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+        padding: 6px; min-width: 200px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        opacity: 0; visibility: hidden; transform: translateY(-6px);
+        transition: all 0.18s;
+    }
+    .dropdown-menu.show { opacity: 1; visibility: visible; transform: translateY(0); }
+
+    .dmenu-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 11px 14px; border-radius: 10px; cursor: pointer;
+        font-size: 0.9rem; font-weight: 500; color: var(--text);
+        transition: background 0.13s; white-space: nowrap;
+    }
+    .dmenu-item:hover { background: var(--surface2); }
+    .dmenu-item.active { color: var(--accent); }
+    .dmenu-item .dmenu-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .dmenu-separator { height: 1px; background: var(--border); margin: 4px 6px; }
+
+    .status-bar { padding: 10px 16px 0; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 1; }
+    .current-collection { display: inline-flex; align-items: center; gap: 6px; background: rgba(212,168,83,0.12); border: 1px solid rgba(212,168,83,0.3); border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; font-weight: 500; color: var(--accent); }
+    .notes-count { font-size: 0.78rem; color: var(--text-muted); }
+
+    .notes-container { padding: 16px 16px 100px; position: relative; z-index: 1; }
+    .notes-grid { display: flex; flex-direction: column; gap: 8px; }
+
+    .note-row {
+        display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); cursor: pointer; transition: all 0.18s; overflow: hidden;
+        animation: slide-in 0.25s ease both;
+    }
+    @keyframes slide-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+    .note-row:hover { border-color: var(--accent); background: var(--surface2); transform: translateX(4px); }
+    
+    .note-strip { width: 14px; flex-shrink: 0; align-self: stretch; border-radius: var(--radius) 0 0 var(--radius); }
+    .note-row-content { flex: 1; display: flex; align-items: center; padding: 14px 16px; gap: 10px; min-width: 0; }
+    .note-title { flex: 1; min-width: 0; font-weight: 600; font-size: 0.98rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .note-actions { display: flex; align-items: center; padding-right: 6px; gap: 0px; }
+    .nact-btn { background: none; border: none; color: var(--text-muted); width: 30px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.92rem; border-radius: 6px; transition: all 0.15s; }
+    .nact-btn:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+    .nact-btn.danger:hover { background: rgba(224,84,84,0.15); color: var(--danger); }
+
+    .empty-state { text-align: center; padding: 80px 20px; }
+    .empty-text { font-size: 1rem; color: var(--text-muted); line-height: 1.6; }
+
+    .fab {
+        position: fixed; bottom: 28px; right: 20px; z-index: 200; width: 60px; height: 60px;
+        border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2));
+        color: #0f0f0f; border: none; font-size: 2rem; font-weight: 300; cursor: pointer;
+        box-shadow: 0 8px 28px rgba(212,168,83,0.4); display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+
+    /* --- Editor --- */
+    .editor-overlay {
+        position: fixed; inset: 0; z-index: 500;
+        display: flex; flex-direction: column;
+        background: #faf8f5;
+        opacity: 0; visibility: hidden;
+        transition: opacity 0.25s, visibility 0.25s;
+    }
+    .editor-overlay.show { opacity: 1; visibility: visible; }
+
+    /* Editor Header */
+    .editor-header {
+        display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+        background: #f5f2ed; border-bottom: 1px solid rgba(0,0,0,0.08); flex-shrink: 0;
+        height: 60px;
+        position: relative; overflow: hidden;
+    }
+    /* Triangle couleur coin supérieur gauche */
+    .editor-header::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        width: 0; height: 0;
+        border-style: solid;
+        border-width: 52px 52px 0 0;
+        border-color: var(--note-color, #e74c3c) transparent transparent transparent;
+        transition: border-color 0.2s;
+        z-index: 0;
+    }
+    .editor-back { position: relative; z-index: 1; }
+    .editor-back {
+        background: rgba(0,0,0,0.08); border: none; border-radius: 10px;
+        width: 40px; height: 40px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; cursor: pointer; color: rgba(0,0,0,0.5); transition: background 0.15s;
+    }
+    .editor-title-input {
+        width: 100%; background: none; border: none; outline: none;
+        font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700;
+        color: rgba(0,0,0,0.8);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    
+    .editor-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .icon-btn {
+        background: rgba(0,0,0,0.08); border: none; border-radius: 10px;
+        width: 40px; height: 40px;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+        color: rgba(0,0,0,0.5); transition: all 0.15s; font-size: 1.1rem;
+    }
+    .icon-btn:hover { background: rgba(0,0,0,0.12); }
+    .icon-btn.save { background: var(--accent); color: #0f0f0f; width: auto; padding: 0 16px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600; }
+
+    .editor-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .editor-body { padding: 24px 20px 160px; }
+
+    .paragraph-block { position: relative; margin-bottom: 24px; }
+    .paragraph-input {
+        width: 100%; background: transparent; border: none; outline: none; resize: none;
+        font-family: 'DM Sans', sans-serif; font-size: 1.05rem; line-height: 1.6;
+        color: rgba(0,0,0,0.8); min-height: 60px;
+    }
+    .paragraph-input::placeholder { color: rgba(0,0,0,0.25); }
+
+    .paragraph-separator {
+        height: 1px; background: rgba(0,0,0,0.15); margin: 20px 0 24px 0;
+        position: relative;
+    }
+    .paragraph-separator::after {
+        content: ''; position: absolute; left: 50%; top: -3px; transform: translateX(-50%);
+        width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+    }
+
+    /* Editor Footer Toolbar */
+    .editor-toolbar {
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+        background: #f5f2ed; border-top: 1px solid rgba(0,0,0,0.08);
+        padding: 12px 20px 28px; /* Safe area padding bottom */
+        display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .tool-group { display: flex; gap: 10px; align-items: center; }
+    
+    .tool-btn {
+        background: rgba(0,0,0,0.06); border: none; border-radius: 12px; width: 48px; height: 48px;
+        display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;
+        color: rgba(0,0,0,0.6); font-size: 1.2rem; position: relative;
+    }
+    .tool-btn:active { transform: scale(0.95); }
+    .tool-btn.add-para { background: var(--accent); color: #0f0f0f; font-size: 1.5rem; font-weight: 300; }
+    
+    /* Color Picker Button & Popup */
+    .tool-btn.color-btn { overflow: visible; }
+    .color-preview-dot {
+        width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: none;
+    }
+    
+    .color-popup {
+        position: absolute; bottom: 60px; left: 0; 
+        background: white; padding: 12px; border-radius: 16px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 152px; z-index: 20;
+        opacity: 0; visibility: hidden; transform: translateY(10px);
+        transition: all 0.2s;
+    }
+    .color-popup.show { opacity: 1; visibility: visible; transform: translateY(0); }
+    
+    .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s; }
+    .swatch.active { border-color: rgba(0,0,0,0.4); transform: scale(1.15); }
+
+    /* Mic Button State */
+    .tool-btn.mic.recording { background: #ef4444; color: white; animation: pulse-mic 1.2s infinite; }
+    .tool-btn:disabled { opacity: 0.3 !important; pointer-events: none; }
+    @keyframes pulse-mic { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+    /* --- Side Panel --- */
+    .side-panel-overlay { position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.3); opacity: 0; visibility: hidden; transition: all 0.3s; }
+    .side-panel-overlay.show { opacity: 1; visibility: visible; }
+
+    .side-panel {
+        position: fixed; top: 0; right: 0; bottom: 0; width: 85%; max-width: 320px;
+        background: #faf8f5; z-index: 601;
+        transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+    }
+    .side-panel.show { transform: translateX(0); }
+
+    .side-panel-header { padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
+    .side-panel-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: rgba(0,0,0,0.8); }
+    .side-panel-close { background: none; border: none; font-size: 1.5rem; color: rgba(0,0,0,0.4); cursor: pointer; }
+
+    .side-panel-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .para-item-card {
+        background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
+        padding: 14px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
+    }
+    .para-item-card:hover { border-color: var(--accent); }
+    .para-num { font-size: 0.7rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
+    .para-preview { font-size: 0.92rem; color: rgba(0,0,0,0.7); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* --- Dialogs --- */
+    .dialog-overlay {
+        position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(8px); display: flex; align-items: flex-start; justify-content: center;
+        padding: 80px 16px 20px; opacity: 0; visibility: hidden; transition: all 0.2s; overflow-y: auto;
+    }
+    .dialog-overlay.show { opacity: 1; visibility: visible; }
+    .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 24px; width: 100%; max-width: 440px; }
+    .dialog-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; margin-bottom: 18px; color: var(--text); }
+    .form-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; display: block; }
+    .form-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none; }
+    .form-input:focus { border-color: var(--accent); }
+    .dialog-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+    .btn { padding: 10px 18px; border-radius: 10px; border: none; font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0f0f0f; }
+    
+    .saved-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); cursor: pointer; margin-bottom: 8px; }
+    .saved-item:hover { border-color: var(--accent); }
+    .saved-item-name { font-weight: 600; font-size: 0.9rem; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .autosave-indicator {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: transparent; border: 2px solid transparent;
+        transition: all 0.3s; flex-shrink: 0;
+    }
+    .autosave-indicator.saving {
+        background: var(--accent); border-color: var(--accent);
+        animation: pulse-save 0.8s ease infinite;
+    }
+    .autosave-indicator.saved {
+        background: #2ecc71; border-color: #2ecc71;
+    }
+    @keyframes pulse-save {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    /* --- Recherche overlay --- */
+    .search-overlay {
+        position: fixed; inset: 0; z-index: 400;
+        background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+        display: flex; align-items: flex-start; padding-top: 70px;
+        opacity: 0; visibility: hidden; transition: all 0.2s;
+    }
+    .search-overlay.show { opacity: 1; visibility: visible; }
+    .search-modal {
+        width: 100%; padding: 0 16px;
+        transform: translateY(-10px); transition: transform 0.2s;
+    }
+    .search-overlay.show .search-modal { transform: translateY(0); }
+    .search-modal-inner {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--surface2); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 12px 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .search-modal-input {
+        flex: 1; background: none; border: none; outline: none;
+        color: var(--text); font-family: inherit; font-size: 1rem;
+    }
+    .search-modal-input::placeholder { color: var(--text-muted); }
+    .search-cancel {
+        background: none; border: none; color: var(--accent);
+        font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+        padding: 0; white-space: nowrap; flex-shrink: 0;
+    }
+    .hbtn-icon.search-active { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
+
+    .search-results {
+        margin-top: 8px;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); overflow: hidden;
+        max-height: 58vh; overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .search-result-item {
+        display: flex; align-items: center; gap: 12px;
+        padding: 13px 16px; cursor: pointer;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.13s; -webkit-tap-highlight-color: transparent;
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:active { background: var(--surface2); }
+    .search-result-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .search-result-title {
+        font-weight: 600; font-size: 0.95rem; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-result-match {
+        font-size: 0.76rem; color: var(--text-muted);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+    }
+    .search-result-match em { color: var(--accent); font-style: normal; font-weight: 600; }
+    .search-no-result { padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+
+    .hbtn-icon:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+
+    /* --- Archive --- */
+    .view-tabs {
+        display: flex; gap: 6px; padding: 12px 16px 0;
+        position: relative; z-index: 1;
+    }
+    .view-tab {
+        flex: 1; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);
+        background: var(--surface); color: var(--text-muted);
+        font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+        transition: all 0.18s; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .view-tab.active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+    .tab-badge {
+        background: var(--accent); color: #0f0f0f; border-radius: 20px;
+        font-size: 0.7rem; font-weight: 700; padding: 1px 6px; min-width: 18px; text-align: center;
+        display: none;
+    }
+    .tab-badge.visible { display: inline-block; }
+
+    .note-row.archived { opacity: 0.75; }
+    .note-row.in-today .nact-today { color: var(--accent); }
+    .nact-btn.restore { color: #2ecc71; }
+    .nact-btn.restore:hover { background: rgba(46,204,113,0.15); color: #2ecc71; }
+
+    .today-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 16px 0; position: relative; z-index: 1;
+    }
+    .today-clear-btn {
+        background: none; border: 1px solid var(--border); color: var(--text-muted);
+        border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; font-family: inherit; transition: all 0.15s;
+    }
+    .today-clear-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(224,84,84,0.08); }
+
+    .nact-btn.nact-up, .nact-btn.nact-dn {
+        font-size: 0.7rem; color: var(--text-muted); width: 28px; height: 28px;
+    }
+    .nact-btn.nact-up:hover, .nact-btn.nact-dn:hover { color: var(--accent); background: rgba(212,168,83,0.12); }
+
+    /* --- GPS Modal --- */
+    .gps-input-wrap { position: relative; }
+    .gps-suggestions {
+        position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10;
+        background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
+        overflow: hidden; max-height: 220px; overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .gps-suggestion-item {
+        padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+        font-size: 0.88rem; color: var(--text); transition: background 0.12s;
+        display: flex; align-items: flex-start; gap: 8px;
+    }
+    .gps-suggestion-item:last-child { border-bottom: none; }
+    .gps-suggestion-item:hover, .gps-suggestion-item:active { background: rgba(212,168,83,0.1); }
+    .gps-suggestion-icon { flex-shrink: 0; margin-top: 1px; opacity: 0.5; }
+    .gps-suggestion-main { font-weight: 500; }
+    .gps-suggestion-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 1px; }
+    .gps-searching { padding: 12px 14px; font-size: 0.85rem; color: var(--text-muted); text-align: center; }
+    .gps-has-address { border-color: var(--accent) !important; }
+    .nact-btn.nact-gps-active { color: var(--accent); }
+    .icon-btn.gps-active { border-color: var(--accent); color: var(--accent); background: rgba(212,168,83,0.1); }
+    .navigate-btn {
+        flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+        color: #fff; border: none; border-radius: 10px; padding: 11px 18px;
+        font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+        transition: opacity 0.15s;
+    }
+    .navigate-btn:hover { opacity: 0.88; }
+    .navigate-btn:disabled { opacity: 0.35; cursor: default; }
+
+    /* Modale GPS alignée en haut */
+    #gpsOverlay {
+        align-items: flex-start;
+        padding: 12px 12px 20px;
+    }
+    #gpsOverlay .dialog {
+        margin-top: 0;
+    }
+
+    /* Lignes d'adresse (même style que phone-row) */
+    .address-row {
+        display: flex; align-items: center; gap: 6px; margin-bottom: 7px;
+    }
+    .address-row-text {
+        flex: 3; font-size: 0.88rem; color: var(--text); line-height: 1.3;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .address-nav-btn {
+        flex: 1; background: linear-gradient(135deg, var(--accent), var(--accent2));
+        border: none; border-radius: 10px; padding: 9px 6px;
+        color: #0f0f0f; font-family: inherit; font-size: 0.75rem; font-weight: 700;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        gap: 4px; transition: opacity 0.15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .address-nav-btn:hover { opacity: 0.85; }
+
+    /* Section téléphone */
+    .phone-row {
+        display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+    }
+    .phone-number-btn {
+        flex: 1; background: var(--surface2); border: 1px solid var(--border);
+        border-radius: 10px; padding: 10px 12px; color: var(--text);
+        font-family: inherit; font-size: 0.95rem; text-align: left;
+        cursor: pointer; transition: all 0.15s; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .phone-number-btn:hover { border-color: var(--accent); background: rgba(212,168,83,0.07); }
+    .phone-number-input {
+        flex: 1; background: var(--surface2); border: 1px solid var(--border);
+        border-radius: 10px; padding: 10px 12px; color: var(--text);
+        font-family: inherit; font-size: 0.95rem; outline: none; min-width: 0;
+    }
+    .phone-number-input:focus { border-color: var(--accent); }
+    .phone-type-select {
+        background: var(--surface2); border: 1px solid var(--border);
+        border-radius: 10px; padding: 10px 8px; color: var(--text);
+        font-family: inherit; font-size: 0.82rem; outline: none;
+        cursor: pointer; flex-shrink: 0; width: 100px;
+    }
+    .phone-type-select:focus { border-color: var(--accent); }
+    .phone-call-btn {
+        background: none; border: 1px solid var(--border); border-radius: 10px;
+        width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+        color: #2ecc71; cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+    }
+    .phone-call-btn:hover { background: rgba(46,204,113,0.12); border-color: #2ecc71; }
+    .phone-delete-btn {
+        background: none; border: none; color: var(--text-muted); cursor: pointer;
+        width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; flex-shrink: 0; font-size: 0.9rem; transition: color 0.15s;
+    }
+    .phone-delete-btn:hover { color: var(--danger); }
+    .phone-add-btn {
+        background: none; border: 1px dashed var(--border); border-radius: 10px;
+        padding: 8px 14px; color: var(--text-muted); font-family: inherit;
+        font-size: 0.82rem; cursor: pointer; width: 100%; margin-top: 2px;
+        transition: all 0.15s;
+    }
+    .phone-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .phone-type-custom {
+        background: var(--surface2); border: 1px solid var(--accent);
+        border-radius: 10px; padding: 10px 8px; color: var(--text);
+        font-family: inherit; font-size: 0.82rem; outline: none; width: 100px; flex-shrink: 0;
+    }
+
+    /* --- Auth Screen --- */
+    .auth-screen {
+        position: fixed; inset: 0; z-index: 2000;
+        background: var(--bg); display: flex; flex-direction: column;
+        align-items: center; justify-content: center; padding: 24px;
+    }
+    .auth-screen::before {
+        content: ''; position: fixed; inset: 0;
+        background: radial-gradient(ellipse 70% 60% at 50% 30%, rgba(212,168,83,0.1) 0%, transparent 65%);
+        pointer-events: none;
+    }
+    .auth-logo {
+        font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 900;
+        color: var(--text); margin-bottom: 8px; text-align: center;
+    }
+    .auth-logo span { color: var(--accent); }
+    .auth-sub { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 36px; }
+    .auth-card {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+        padding: 28px 24px; width: 100%; max-width: 380px;
+    }
+    .auth-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--surface2); border-radius: 12px; padding: 4px; }
+    .auth-tab { flex: 1; padding: 9px; border: none; background: none; color: var(--text-muted); font-family: inherit; font-size: 0.88rem; font-weight: 600; border-radius: 9px; cursor: pointer; transition: all 0.15s; }
+    .auth-tab.active { background: var(--accent); color: #0f0f0f; }
+    .auth-field { margin-bottom: 14px; }
+    .auth-field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+    .auth-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none; transition: border 0.15s; }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-btn { width: 100%; padding: 13px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0f0f0f; font-family: inherit; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-top: 6px; transition: opacity 0.15s; }
+    .auth-btn:hover { opacity: 0.88; }
+    .auth-btn:disabled { opacity: 0.5; cursor: default; }
+    .auth-separator { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text-muted); font-size: 0.78rem; }
+    .auth-separator::before, .auth-separator::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .auth-google-btn { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface2); color: var(--text); font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.15s; }
+    .auth-google-btn:hover { border-color: var(--accent); background: rgba(212,168,83,0.08); }
+    .auth-forgot { text-align: right; margin-top: 8px; }
+    .auth-forgot button { background: none; border: none; color: var(--text-muted); font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+    .auth-forgot button:hover { color: var(--accent); }
+    .auth-error { background: rgba(224,84,84,0.12); border: 1px solid rgba(224,84,84,0.3); border-radius: 10px; padding: 10px 14px; font-size: 0.84rem; color: #ff8080; margin-bottom: 14px; display: none; }
+    .auth-error.show { display: block; }
+
+    /* --- User badge in header --- */
+    .user-badge { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .user-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 0.82rem; font-weight: 700; color: #0f0f0f; flex-shrink: 0; border: 2px solid transparent; transition: border 0.15s; cursor: pointer; overflow: hidden; }
+    .user-avatar:hover { border-color: var(--accent); }
+
+    /* Modale profil */
+    .profile-avatar-wrap {
+        display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 20px;
+    }
+    .profile-avatar-big {
+        width: 80px; height: 80px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), var(--accent2));
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2rem; font-weight: 700; color: #0f0f0f;
+        border: 3px solid var(--border); overflow: hidden; position: relative;
+        cursor: pointer; transition: border-color 0.15s;
+    }
+    .profile-avatar-big:hover { border-color: var(--accent); }
+    .profile-avatar-big:hover .profile-avatar-overlay { opacity: 1; }
+    .profile-avatar-overlay {
+        position: absolute; inset: 0; background: rgba(0,0,0,0.55);
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; transition: opacity 0.2s; border-radius: 50%;
+        font-size: 0.7rem; font-weight: 600; color: #fff; flex-direction: column; gap: 4px;
+    }
+    .profile-email { font-size: 0.82rem; color: var(--text-muted); text-align: center; }
+    .profile-upload-progress {
+        width: 100%; background: var(--surface2); border-radius: 8px; height: 4px; overflow: hidden; display: none;
+    }
+    .profile-upload-progress-bar {
+        height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+        border-radius: 8px; width: 0%; transition: width 0.3s;
+    }
+    .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; transition: background 0.3s; }
+    .sync-dot.syncing { background: var(--accent); animation: pulse-dot 0.8s infinite alternate; }
+    .sync-dot.offline { background: var(--text-muted); }
+    @keyframes pulse-dot { from { opacity: 1; } to { opacity: 0.3; } }
+
+    /* --- Sharing modal --- */
+    .share-member { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface2); border-radius: 10px; margin-bottom: 8px; border: 1px solid var(--border); }
+    .share-member-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; color: #0f0f0f; flex-shrink: 0; }
+    .share-member-info { flex: 1; min-width: 0; }
+    .share-member-email { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .share-member-role { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+    .shared-space-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
+    .shared-space-item:hover { border-color: var(--accent); }
+    .shared-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(212,168,83,0.15); border: 1px solid rgba(212,168,83,0.3); color: var(--accent); border-radius: 6px; padding: 2px 7px; font-size: 0.7rem; font-weight: 600; margin-left: 6px; }
+
+    /* Code d'invitation */
+    .invite-code-box {
+        display: flex; align-items: center; gap: 12px; margin-top: 4px;
+        background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px;
+    }
+    .invite-code-display {
+        flex: 1; font-size: 1.6rem; font-weight: 800; letter-spacing: 4px;
+        color: var(--accent); font-family: 'Playfair Display', monospace; text-align: center;
+    }
+    .invite-copy-btn {
+        background: none; border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+        padding: 7px 12px; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+        font-family: inherit; transition: all 0.15s; flex-shrink: 0;
+    }
+    .invite-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .invite-copy-btn.copied { border-color: #2ecc71; color: #2ecc71; }
+
+    /* Bannière rejoindre espace */
+    .join-banner {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 1500;
+        background: linear-gradient(135deg, #1a2e1a, #0f1f0f);
+        border-bottom: 1px solid rgba(46,204,113,0.3);
+        padding: 14px 20px; display: flex; align-items: center; gap: 12px;
+    }
+    .join-banner-text { flex: 1; font-size: 0.9rem; color: #e0ffe0; }
+    .join-banner-name { font-weight: 700; color: #2ecc71; }
+    .join-accept { background: #2ecc71; color: #0f0f0f; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 700; font-family: inherit; cursor: pointer; font-size: 0.88rem; }
+    .join-decline { background: none; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); border-radius: 8px; padding: 8px 12px; font-family: inherit; cursor: pointer; font-size: 0.88rem; }
+
+    .rec-status {
+        position: fixed; top: 0; left: 0; right: 0; height: 4px; background: #ef4444; z-index: 1000;
+        transform: scaleX(0); transform-origin: left;
+    }
+    .rec-status.active { animation: rec-progress 2s infinite linear; }
+    @keyframes rec-progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+
+</style>
+</head>
+<body>
+
+<div class="rec-status" id="recStatus"></div>
+
+<header>
+    <div class="header-brand">
+        <span class="brand-mat">Mat</span><span class="brand-dot">'</span><span class="brand-notes">s Notes</span>
+    </div>
+    <div class="header-actions">
+
+        <!-- Bouton Undo -->
+        <button class="hbtn-icon" id="undoBtn" onclick="undoAction()" title="Annuler" disabled>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M3 7v6h6"/>
+                <path d="M3 13C5 7.5 10.5 4 17 5.5a9 9 0 0 1 4 14.5"/>
+            </svg>
+        </button>
+
+        <!-- Bouton Recherche -->
+        <button class="hbtn-icon" id="searchBtn" onclick="toggleSearch()" title="Rechercher">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <circle cx="11" cy="11" r="7"/>
+                <line x1="16.5" y1="16.5" x2="22" y2="22"/>
+            </svg>
+        </button>
+
+        <!-- Bouton Installer (visible uniquement si PWA installable) -->
+        <button class="hbtn-icon" id="installBtn" onclick="installPWA()" title="Installer l'application" style="display:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M12 16l-4-4h3V4h2v8h3l-4 4z"/>
+                <path d="M20 18H4v2h16v-2z"/>
+            </svg>
+        </button>
+
+        <!-- Bouton Tri -->
+        <div class="dropdown" id="sortDropdown">
+            <button class="hbtn-icon" id="sortBtn" onclick="toggleDropdown('sortDropdown')" title="Trier les notes">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="6" y1="12" x2="18" y2="12"/>
+                    <line x1="9" y1="18" x2="15" y2="18"/>
+                </svg>
+            </button>
+            <div class="dropdown-menu" id="sortMenu">
+                <div class="dmenu-item" id="sort-date" onclick="setSort('date')">
+                    <span class="dmenu-icon">🕐</span> Dernière modification
+                </div>
+                <div class="dmenu-item" id="sort-title" onclick="setSort('title')">
+                    <span class="dmenu-icon">🔤</span> Nom (A → Z)
+                </div>
+                <div class="dmenu-item" id="sort-color" onclick="setSort('color')">
+                    <span class="dmenu-icon">🎨</span> Couleur
+                </div>
+            </div>
+        </div>
+
+        <!-- Bouton Menu ··· -->
+        <div class="dropdown" id="actionsDropdown">
+            <button class="hbtn-icon" id="actionsBtn" onclick="toggleDropdown('actionsDropdown')" title="Menu">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+                </svg>
+            </button>
+            <div class="dropdown-menu" id="actionsMenu">
+                <div class="dmenu-item" onclick="closeDropdowns(); showSaveDialog()">
+                    <span class="dmenu-icon">💾</span> Sauvegarder
+                </div>
+                <div class="dmenu-item" onclick="closeDropdowns(); showLoadDialog()">
+                    <span class="dmenu-icon">📂</span> Charger
+                </div>
+                <div class="dmenu-separator"></div>
+                <div class="dmenu-item" onclick="closeDropdowns(); exportAllNotes()">
+                    <span class="dmenu-icon">⬆️</span> Exporter tout (.json)
+                </div>
+                <div class="dmenu-item" onclick="closeDropdowns(); triggerImport()">
+                    <span class="dmenu-icon">⬇️</span> Importer (.json)
+                </div>
+                <div class="dmenu-separator"></div>
+                <div class="dmenu-item" onclick="closeDropdowns(); openShareModal()">
+                    <span class="dmenu-icon">🔗</span> Espaces partagés
+                </div>
+                <div class="dmenu-separator"></div>
+                <div class="dmenu-item" onclick="closeDropdowns(); signOutUser()" style="color:var(--danger)">
+                    <span class="dmenu-icon">🚪</span> Déconnexion
+                </div>
+            </div>
+        </div>
+
+        <!-- Input caché pour l'import -->
+        <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importNotes(event)">
+
+        <!-- Indicateur sync + avatar utilisateur -->
+        <div class="user-badge" id="userBadge" style="display:none">
+            <div class="sync-dot" id="syncDot"></div>
+            <div class="user-avatar" id="userAvatar" onclick="openProfileModal()" title="Mon profil">?</div>
+        </div>
+    </div>
+</header>
+
+<!-- Overlay Recherche -->
+<div class="search-overlay" id="searchOverlay" onclick="closeSearch(event)">
+    <div class="search-modal" onclick="event.stopPropagation()">
+        <div class="search-modal-inner">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="flex-shrink:0;color:var(--text-muted)">
+                <circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/>
+            </svg>
+            <input class="search-modal-input" id="searchInput" type="search" placeholder="Rechercher une note..." oninput="updateSearchResults()" autocomplete="off" autocorrect="off" autocapitalize="off">
+            <button class="search-cancel" onclick="closeSearch()">Annuler</button>
+        </div>
+        <div class="search-results" id="searchResults" style="display:none"></div>
+    </div>
+</div>
+
+<div class="view-tabs">
+    <button class="view-tab" id="tabToday" onclick="setView('today')">
+        📅 Aujourd'hui <span class="tab-badge" id="badgeToday"></span>
+    </button>
+    <button class="view-tab active" id="tabActive" onclick="setView('active')">
+        📝 Actives <span class="tab-badge" id="badgeActive"></span>
+    </button>
+    <button class="view-tab" id="tabArchive" onclick="setView('archive')">
+        📦 Archives <span class="tab-badge" id="badgeArchive"></span>
+    </button>
+</div>
+
+<div class="today-header" id="todayHeader" style="display:none">
+    <span style="font-size:0.78rem;color:var(--text-muted)" id="todayDateLabel"></span>
+    <button class="today-clear-btn" onclick="clearToday()">🗑 Vider la journée</button>
+</div>
+
+<div class="status-bar">
+    <div id="collectionDisplay"></div>
+    <div class="notes-count" id="notesCount"></div>
+</div>
+
+<div class="notes-container">
+    <div class="notes-grid" id="notesList"></div>
+</div>
+
+<button class="fab" onclick="openEditor(null)" title="Nouvelle note">+</button>
+
+<!-- Editor Overlay -->
+<div class="editor-overlay" id="editorOverlay">
+    <div class="editor-header">
+        <button class="editor-back" onclick="closeEditor()">←</button>
+        <div class="editor-title-wrap">
+            <input class="editor-title-input" id="editorTitle" type="text" placeholder="Titre..." maxlength="80" oninput="scheduleEditorSnapshot(); autoSave()">
+        </div>
+        <div class="editor-actions">
+            <div class="autosave-indicator" id="autosaveIndicator" title="Sauvegarde automatique"></div>
+            <button class="icon-btn" id="editorGpsBtn" onclick="openGpsModal()" title="Adresse / Navigation">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                    <circle cx="12" cy="9" r="2.5"/>
+                </svg>
+            </button>
+            <button class="icon-btn" onclick="openSidePanel()" title="Liste des séances">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="editor-scroll">
+        <div class="editor-body" id="editorBody"></div>
+    </div>
+
+    <div class="editor-toolbar">
+        <div class="tool-group">
+            <!-- Color Button with Popup -->
+            <button class="tool-btn color-btn" onclick="toggleColorPicker()" title="Couleur">
+                <div class="color-preview-dot" id="colorPreviewDot" style="background: #e74c3c;"></div>
+                <div class="color-popup" id="colorPopup">
+                    <!-- Swatches injected by JS -->
+                </div>
+            </button>
+            
+            <!-- Other buttons -->
+            <button class="tool-btn export" onclick="exportCurrentNote()" title="Exporter">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7,10 12,15 17,10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </button>
+            <button class="tool-btn" id="editorUndoBtn" onclick="undoEditor()" title="Annuler (undo)" disabled style="opacity:0.35">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M3 7v6h6"/><path d="M3 13C5 7.5 10.5 4 17 5.5a9 9 0 0 1 4 14.5"/>
+                </svg>
+            </button>
+            <button class="tool-btn mic" id="micBtn" onclick="toggleMic()" title="Dicter">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="tool-group">
+            <button class="tool-btn add-para" onclick="addParagraph()" title="Nouvelle séance">+</button>
+        </div>
+    </div>
+</div>
+
+<!-- Side Panel -->
+<div class="side-panel-overlay" id="sideOverlay" onclick="closeSidePanel()"></div>
+<div class="side-panel" id="sidePanel">
+    <div class="side-panel-header">
+        <span class="side-panel-title">Séances</span>
+        <button class="side-panel-close" onclick="closeSidePanel()">✕</button>
+    </div>
+    <div class="side-panel-list" id="paraList"></div>
+</div>
+
+<!-- Dialogs -->
+<div class="dialog-overlay" id="saveOverlay" onclick="closeSaveDialog(event)">
+    <div class="dialog" onclick="event.stopPropagation()">
+        <div class="dialog-title">Sauvegarder</div>
+        <div id="existingSavesArea"></div>
+        <div class="form-label">Nom de la collection</div>
+        <input class="form-input" type="text" id="saveNameInput" placeholder="Ex: Travail...">
+        <div class="dialog-actions">
+            <button class="btn btn-secondary" onclick="closeSaveDialog()">Annuler</button>
+            <button class="btn btn-primary" onclick="saveCollection()">Sauvegarder</button>
+        </div>
+    </div>
+</div>
+
+<div class="dialog-overlay" id="loadOverlay" onclick="closeLoadDialog(event)">
+    <div class="dialog" onclick="event.stopPropagation()">
+        <div class="dialog-title">Charger</div>
+        <div id="loadListArea"></div>
+        <div class="dialog-actions">
+            <button class="btn btn-secondary" onclick="closeLoadDialog()">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<script>
+
+// ===== PROFIL / AVATAR =====
+
+function openProfileModal() {
+    const overlay = document.getElementById('profileOverlay');
+    overlay.classList.add('show');
+    history.pushState({ screen: 'profile' }, '');
+    if (!currentUser) return;
+    document.getElementById('profileEmail').textContent = currentUser.email || '';
+    _refreshProfileModal();
+}
+
+function closeProfileModal(e) {
+    if (e && e.target !== document.getElementById('profileOverlay')) return;
+    document.getElementById('profileOverlay').classList.remove('show');
+}
+
+function triggerAvatarUpload() {
+    document.getElementById('avatarFileInput').click();
+}
+
+async function uploadAvatar(event) {
+    const file = event.target.files[0];
+    if (!file || !currentUser) return;
+    if (file.size > 2 * 1024 * 1024) { showToast('❌ Image trop lourde (max 2 Mo)'); return; }
+    const prog = document.getElementById('profileUploadProgress');
+    const bar  = document.getElementById('profileUploadBar');
+    prog.style.display = 'block'; bar.style.width = '30%';
+    try {
+        const base64 = await _resizeAndEncodeImage(file, 256);
+        bar.style.width = '80%';
+        localStorage.setItem(_avatarKey(), base64);
+        bar.style.width = '100%';
+        updateUserBadge(currentUser);
+        _refreshProfileModal();
+        showToast('✅ Photo de profil mise à jour !');
+    } catch(e) {
+        showToast('❌ Erreur : ' + e.message);
+    } finally {
+        setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0%'; }, 600);
+        event.target.value = '';
+    }
+}
+
+function _resizeAndEncodeImage(file, maxSize) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement('canvas');
+            const min = Math.min(img.width, img.height);
+            const sx  = (img.width - min) / 2, sy = (img.height - min) / 2;
+            canvas.width = canvas.height = Math.min(min, maxSize);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, sx, sy, min, min, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = () => reject(new Error("Impossible de lire l'image"));
+        img.src = url;
+    });
+}
+
+function _refreshProfileModal() {
+    if (!currentUser) return;
+    const av = document.getElementById('profileAvatarBig');
+    if (!av) return;
+    const localPhoto = _avatarKey() ? localStorage.getItem(_avatarKey()) : null;
+    const photoSrc   = localPhoto || currentUser.photoURL || null;
+    const overlayHTML = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Changer</div>`;
+    if (photoSrc) {
+        av.innerHTML = `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover">${overlayHTML}`;
+    } else {
+        const initials = currentUser.displayName
+            ? currentUser.displayName.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
+            : (currentUser.email || '?')[0].toUpperCase();
+        av.innerHTML = initials + overlayHTML;
+    }
+}
+// --- State & Config ---
+const STORAGE_KEY = 'matsNotes';
+const NOTE_COLORS = [
+    // Ligne 1 — couleurs vives originales
+    '#e74c3c','#e67e22','#f1c40f','#2ecc71',
+    // Ligne 2
+    '#1abc9c','#3498db','#9b59b6','#e91e63',
+    // Ligne 3
+    '#00bcd4','#ff5722',
+    // Ligne 3 suite — nouvelles couleurs
+    '#ff8a65','#a5d6a7',
+    // Ligne 4 — nouvelles
+    '#81d4fa','#ce93d8','#f48fb1','#80cbc4',
+    // Ligne 5 — nouvelles
+    '#bcaaa4','#b0bec5','#ffe082','#c5e1a5'
+];
+
+let state = { notes: [], archived: [], today: [], collections: [], currentCollection: null };
+let editingNoteId = null;
+let currentColor = NOTE_COLORS[0];
+let paragraphs = [''];
+let recognition = null;
+let isRecording = false;
+let activeParaIndex = 0;
+let currentSort = 'title'; // 'date' | 'title' | 'color'
+let currentView = 'active'; // 'active' | 'archive' | 'today'
+
+// --- Undo ---
+const UNDO_MAX = 30;
+let undoStack = [];
+
+function snapshotState(label = '') {
+    undoStack.push({
+        label,
+        notes: JSON.parse(JSON.stringify(state.notes)),
+        archived: JSON.parse(JSON.stringify(state.archived || []))
+    });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    updateUndoBtn();
+}
+
+function undoAction() {
+    if (undoStack.length === 0) return;
+    const snap = undoStack.pop();
+    state.notes = snap.notes;
+    state.archived = snap.archived;
+    save();
+    renderNotes();
+    updateUndoBtn();
+    showToast(`↩ Annulé : ${snap.label}`);
+}
+
+function updateUndoBtn() {
+    const btn = document.getElementById('undoBtn');
+    if (!btn) return;
+    btn.disabled = undoStack.length === 0;
+    btn.title = undoStack.length > 0 ? `Annuler : ${undoStack[undoStack.length - 1].label}` : 'Rien à annuler';
+}
+
+function showToast(msg) {
+    let t = document.getElementById('toastMsg');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'toastMsg';
+        t.style.cssText = `position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+            background:var(--surface2);border:1px solid var(--border);color:var(--text);
+            padding:10px 18px;border-radius:12px;font-size:0.88rem;font-weight:500;
+            z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);
+            opacity:0;transition:opacity 0.2s;white-space:nowrap;`;
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2200);
+}
+
+// Variables pour la transcription vocale
+let recCommitted = '';  // Texte définitivement validé (accumulé session après session)
+let recInterim = '';    // Texte en cours de reconnaissance (affiché en temps réel, non sauvé)
+
+// --- PWA ---
+let deferredInstallPrompt = null;
+
+// Capture l'événement d'installation avant qu'il ne disparaisse
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'none';
+});
+
+function installPWA() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(() => {
+        deferredInstallPrompt = null;
+        closeDropdowns();
+    });
+}
+
+function initPWA() {
+    // Rediriger automatiquement 127.0.0.1 → localhost (pour Google Auth)
+    if (window.location.hostname === '127.0.0.1') {
+        window.location.replace(window.location.href.replace('127.0.0.1', 'localhost'));
+        return;
+    }
+    // manifest.json et icônes sont des fichiers statiques (même dossier).
+    // <link rel="manifest"> est déjà dans le <head>.
+    // On enregistre uniquement le Service Worker ici.
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+            .then(reg => console.log('[PWA] SW enregistré :', reg.scope))
+            .catch(err => console.warn('[PWA] SW non enregistré :', err.message));
+    }
+}
+
+// --- Firebase State ---
+let currentUser   = null;
+let currentSpaceId = null; // null = notes perso, sinon ID de l'espace partagé actif
+let unsubscribeSnapshot = null; // pour détacher le listener Firestore
+
+// Callback appelé par le module Firebase quand l'auth change
+window.onAuthChange = function(user) {
+    currentUser = user;
+    if (user) {
+        document.getElementById('authScreen').style.display = 'none';
+        updateUserBadge(user);
+        document.getElementById('userBadge').style.display = 'flex';
+        subscribeToNotes();
+        // Vérifier si une invitation était en attente de connexion
+        if (window._pendingInvite) {
+            const { token, spaceId } = window._pendingInvite;
+            window._pendingInvite = null;
+            setTimeout(() => joinSpaceFromInvite(token, spaceId), 1000);
+        }
+    } else {
+        document.getElementById('authScreen').style.display = 'flex';
+        document.getElementById('userBadge').style.display = 'none';
+        if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+        loadLocal();
+    }
+};
+
+function _avatarKey() {
+    return currentUser ? `matsNotes_avatar_${currentUser.uid}` : null;
+}
+
+function updateUserBadge(user) {
+    const av = document.getElementById('userAvatar');
+    if (!av) return;
+    const initials = user.displayName
+        ? user.displayName.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
+        : (user.email || '?')[0].toUpperCase();
+    const localPhoto = _avatarKey() ? localStorage.getItem(_avatarKey()) : null;
+    const photoSrc   = localPhoto || user.photoURL || null;
+    if (photoSrc) {
+        const img = document.createElement('img');
+        img.src = photoSrc;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+        img.onerror = () => { av.textContent = initials; };
+        av.innerHTML = '';
+        av.appendChild(img);
+    } else {
+        av.textContent = initials;
+    }
+    av.title = user.displayName || user.email || '';
+}
+
+function setSyncDot(state) { // 'ok' | 'syncing' | 'offline'
+    const d = document.getElementById('syncDot');
+    if (!d) return;
+    d.className = 'sync-dot' + (state === 'syncing' ? ' syncing' : state === 'offline' ? ' offline' : '');
+}
+
+// --- Core: load/save ---
+function _storageKey() {
+    // Clé localStorage différente selon l'espace actif → isolation totale
+    return currentSpaceId ? `${STORAGE_KEY}_space_${currentSpaceId}` : STORAGE_KEY;
+}
+
+function loadLocal() {
+    const s = localStorage.getItem(_storageKey());
+    if (s) state = { ...state, ...JSON.parse(s) };
+    if (!state.collections) state.collections = [];
+    if (!state.archived)    state.archived    = [];
+    if (!state.today)       state.today       = [];
+}
+function load() { loadLocal(); } // compatibilité
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function save() {
+    // 1. Sauvegarder en local dans la clé propre à l'espace courant
+    localStorage.setItem(_storageKey(), JSON.stringify(state));
+    // 2. Si connecté, pousser vers Firestore au bon endroit
+    if (currentUser) syncToFirestore();
+}
+
+async function syncToFirestore() {
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    if (!fbDb || !currentUser) return;
+    setSyncDot('syncing');
+    try {
+        // Écrire dans l'espace partagé OU dans les notes perso selon contexte
+        const ref = currentSpaceId
+            ? doc(fbDb, 'shared', currentSpaceId, 'data', 'main')
+            : doc(fbDb, 'users', currentUser.uid, 'data', 'main');
+        await setDoc(ref, {
+            notes:             state.notes,
+            archived:          state.archived     || [],
+            today:             state.today        || [],
+            collections:       state.collections  || [],
+            currentCollection: state.currentCollection || null,
+            updatedAt:         serverTimestamp()
+        });
+        setSyncDot('ok');
+    } catch(e) {
+        console.error('Sync Firestore échouée :', e);
+        setSyncDot('offline');
+    }
+}
+
+function subscribeToNotes(spaceId = null) {
+    const { fbDb, doc, onSnapshot } = window._fb;
+    if (!fbDb || !currentUser) return;
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+
+    const ref = spaceId
+        ? doc(fbDb, 'shared', spaceId, 'data', 'main')
+        : doc(fbDb, 'users', currentUser.uid, 'data', 'main');
+
+    // Vider l'état avant de charger le nouvel espace (évite que les notes d'un espace
+    // restent affichées pendant le chargement de l'autre)
+    state.notes      = [];
+    state.archived   = [];
+    state.today      = [];
+    state.collections = [];
+    state.currentCollection = null;
+    renderNotes();
+    renderCollDisplay();
+
+    setSyncDot('syncing');
+    unsubscribeSnapshot = onSnapshot(ref, (snap) => {
+        if (snap.exists()) {
+            const d = snap.data();
+            state.notes             = d.notes             || [];
+            state.archived          = d.archived          || [];
+            state.today             = d.today             || [];
+            state.collections       = d.collections       || [];
+            state.currentCollection = d.currentCollection || null;
+        } else {
+            // Document inexistant (espace vide ou nouveau) → état vide
+            state.notes = []; state.archived = []; state.today = [];
+            state.collections = []; state.currentCollection = null;
+        }
+        // Cache local isolé par espace
+        localStorage.setItem(_storageKey(), JSON.stringify(state));
+        renderNotes();
+        renderCollDisplay();
+        setSyncDot('ok');
+    }, (err) => {
+        console.error('onSnapshot erreur :', err);
+        setSyncDot('offline');
+    });
+}
+
+// --- Auth functions ---
+let authMode = 'login'; // 'login' | 'signup'
+
+function switchAuthTab(mode) {
+    authMode = mode;
+    document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
+    document.getElementById('tabSignup').classList.toggle('active', mode === 'signup');
+    document.getElementById('authSubmitBtn').textContent = mode === 'login' ? 'Se connecter' : 'Créer le compte';
+    document.getElementById('forgotWrap').style.display = mode === 'login' ? 'block' : 'none';
+    document.getElementById('authError').classList.remove('show');
+}
+
+function showAuthError(msg) {
+    const el = document.getElementById('authError');
+    el.textContent = msg; el.classList.add('show');
+}
+
+async function submitAuth() {
+    const { fbAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = window._fb;
+    const email    = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    if (!email || !password) return showAuthError('Veuillez remplir tous les champs.');
+    const btn = document.getElementById('authSubmitBtn');
+    btn.disabled = true; btn.textContent = '…';
+    document.getElementById('authError').classList.remove('show');
+    try {
+        if (authMode === 'login') {
+            await signInWithEmailAndPassword(fbAuth, email, password);
+        } else {
+            await createUserWithEmailAndPassword(fbAuth, email, password);
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer le compte';
+        const msgs = {
+            'auth/user-not-found':    'Aucun compte avec cet e-mail.',
+            'auth/wrong-password':    'Mot de passe incorrect.',
+            'auth/email-already-in-use': 'Cet e-mail est déjà utilisé.',
+            'auth/weak-password':     'Mot de passe trop court (6 caractères min).',
+            'auth/invalid-email':     'Adresse e-mail invalide.',
+            'auth/invalid-credential':'E-mail ou mot de passe incorrect.',
+        };
+        showAuthError(msgs[e.code] || 'Erreur : ' + e.message);
+    }
+}
+
+async function signInGoogle() {
+    const { fbAuth, GoogleAuthProvider, signInWithPopup } = window._fb;
+    try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(fbAuth, provider);
+    } catch(e) {
+        if (e.code !== 'auth/popup-closed-by-user') showAuthError('Erreur Google : ' + e.message);
+    }
+}
+
+async function forgotPassword() {
+    const { fbAuth, sendPasswordResetEmail } = window._fb;
+    const email = document.getElementById('authEmail').value.trim();
+    if (!email) return showAuthError('Entrez votre e-mail pour réinitialiser le mot de passe.');
+    try {
+        await sendPasswordResetEmail(fbAuth, email);
+        showAuthError('✅ E-mail de réinitialisation envoyé !');
+        document.getElementById('authError').style.color = '#2ecc71';
+    } catch(e) {
+        showAuthError('Erreur : ' + e.message);
+    }
+}
+
+async function signOutUser() {
+    const { fbAuth, signOut } = window._fb;
+    if (!confirm('Se déconnecter ?')) return;
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    currentUser = null;
+    await signOut(fbAuth);
+    showToast('👋 Déconnecté');
+}
+
+function toggleUserMenu() {
+    // Simple toggle du menu ··· pour l'instant
+    toggleDropdown('actionsDropdown');
+}
+
+// --- Sharing functions ---
+let currentSpaceDetail = null;
+
+async function openShareModal() {
+    document.getElementById('shareOverlay').classList.add('show');
+    history.pushState({ screen: 'share' }, '');
+    await loadSharedSpaces();
+}
+function closeShareModal(e) {
+    if (e && e.target !== document.getElementById('shareOverlay')) return;
+    document.getElementById('shareOverlay').classList.remove('show');
+}
+
+async function loadSharedSpaces() {
+    const { fbDb, collection, query, where, getDocs } = window._fb;
+    const list = document.getElementById('sharedSpacesList');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:8px 0">Chargement…</div>';
+    try {
+        const q    = query(collection(fbDb, 'shared'), where('members', 'array-contains', currentUser.uid));
+        const snap = await getDocs(q);
+
+        let html = '';
+
+        // Bouton retour aux notes perso (si dans un espace)
+        if (currentSpaceId) {
+            html += `<div class="shared-space-item" style="border-color:#2ecc71;margin-bottom:6px" onclick="switchToSpace(null,null)">
+                <span style="font-size:1.1rem">👤</span>
+                <div style="flex:1"><div style="font-weight:600;font-size:0.9rem">Mes notes personnelles</div>
+                <div style="font-size:0.72rem;color:var(--text-muted)">Revenir à mes notes</div></div>
+            </div>`;
+        }
+
+        if (snap.empty && !currentSpaceId) {
+            html += '<div style="color:var(--text-muted);font-size:0.85rem;padding:4px 0 12px">Aucun espace partagé pour l\'instant.</div>';
+        } else {
+            snap.docs.forEach(d => {
+                const data     = d.data();
+                const isActive = currentSpaceId === d.id;
+                html += `<div class="shared-space-item${isActive ? '" style="border-color:var(--accent)' : ''}" onclick="switchToSpace('${d.id}','${escHtml(data.name||'Espace')}')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <div style="flex:1">
+                        <div style="font-weight:600;font-size:0.9rem">${escHtml(data.name||'Sans nom')}</div>
+                        <div style="font-size:0.72rem;color:var(--text-muted)">${(data.members||[]).length} membre(s)${isActive ? ' · <span style="color:var(--accent)">Actif</span>' : ''}</div>
+                    </div>
+                    <button class="nact-btn" onclick="event.stopPropagation();openSpaceDetail('${d.id}','${escHtml(data.name||'Espace')}')" title="Gérer">⚙️</button>
+                </div>`;
+            });
+        }
+
+        list.innerHTML = html;
+    } catch(e) {
+        list.innerHTML = `<div style="color:var(--danger);font-size:0.85rem">Erreur : ${e.message}</div>`;
+    }
+}
+
+async function createSharedSpace() {
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    const name  = document.getElementById('shareSpaceName').value.trim();
+    const errEl = document.getElementById('shareError');
+    errEl.style.display = 'none';
+    if (!name) { errEl.textContent = 'Donnez un nom à l\'espace.'; errEl.style.display = 'block'; return; }
+
+    try {
+        const spaceId = 'space_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+        await setDoc(doc(fbDb, 'shared', spaceId), {
+            name,
+            members:   [currentUser.uid],
+            createdBy: currentUser.uid,
+            createdAt: serverTimestamp()
+        });
+        await setDoc(doc(fbDb, 'shared', spaceId, 'data', 'main'), {
+            notes: [], archived: [], today: [], collections: [], updatedAt: serverTimestamp()
+        });
+        document.getElementById('shareSpaceName').value = '';
+        showToast(`✅ Espace « ${name} » créé !`);
+        await loadSharedSpaces();
+        // Ouvrir directement le détail pour partager le lien
+        await openSpaceDetail(spaceId, name);
+    } catch(e) {
+        errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block';
+    }
+}
+
+function switchToSpace(spaceId, spaceName) {
+    currentSpaceId = spaceId;
+    document.getElementById('shareOverlay').classList.remove('show');
+    subscribeToNotes(spaceId);
+    const av = document.getElementById('userAvatar');
+    if (spaceId) {
+        showToast(`🔗 Espace « ${spaceName} » actif`);
+        if (av) av.style.background = 'linear-gradient(135deg,#2ecc71,#27ae60)';
+    } else {
+        showToast('👤 Notes personnelles');
+        if (av) av.style.background = 'linear-gradient(135deg,var(--accent),var(--accent2))';
+    }
+}
+
+// --- Lien d'invitation ---
+async function openSpaceDetail(spaceId, spaceName) {
+    const { fbDb, doc, getDoc, setDoc, serverTimestamp } = window._fb;
+    currentSpaceDetail = spaceId;
+    document.getElementById('spaceDetailTitle').textContent = spaceName;
+    document.getElementById('spaceDetailOverlay').classList.add('show');
+    document.getElementById('addMemberError').style.display = 'none';
+    document.getElementById('spaceMembersList').innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem">Chargement…</div>';
+
+    try {
+        const spaceRef = doc(fbDb, 'shared', spaceId);
+        const snap     = await getDoc(spaceRef);
+        const data     = snap.data() || {};
+        const members  = data.members || [];
+        const meIsOwner = data.createdBy === currentUser.uid;
+
+        document.getElementById('leaveSpaceBtn').textContent = meIsOwner ? 'Supprimer l\'espace' : 'Quitter';
+
+        // Générer ou récupérer le code d'invitation court (6 caractères lisibles)
+        let inviteToken = data.inviteToken;
+        if (!inviteToken) {
+            inviteToken = _generateInviteCode();
+            await setDoc(spaceRef, { inviteToken }, { merge: true });
+        }
+        // Formater le code en XX-XX-XX pour la lisibilité
+        const codeDisplay = inviteToken.slice(0,2) + '-' + inviteToken.slice(2,4) + '-' + inviteToken.slice(4,6);
+
+        // Afficher les membres
+        document.getElementById('spaceMembersList').innerHTML = [
+            ...members.map(uid => `<div class="share-member">
+                <div class="share-member-avatar">${uid === currentUser.uid ? (document.getElementById('userAvatar').textContent||'?') : '👤'}</div>
+                <div class="share-member-info">
+                    <div class="share-member-email">${uid === currentUser.uid ? (currentUser.email||'Vous') : uid.slice(0,8)+'…'}</div>
+                    <div class="share-member-role">${uid === data.createdBy ? '👑 Créateur' : 'Membre'}</div>
+                </div>
+                ${meIsOwner && uid !== currentUser.uid ? `<button class="nact-btn danger" onclick="removeMember('${spaceId}','${uid}')" title="Retirer">✕</button>` : ''}
+            </div>`)
+        ].join('') || '<div style="color:var(--text-muted);font-size:0.85rem">Aucun membre.</div>';
+
+        // Zone code d'invitation
+        document.getElementById('inviteLinkArea').innerHTML = `
+            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+                <label class="form-label">🔑 Code d'invitation</label>
+                <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">
+                    Communiquez ce code à la personne à inviter. Elle le saisit dans "Rejoindre un espace".
+                </p>
+                <div class="invite-code-box">
+                    <span class="invite-code-display" id="inviteCodeDisplay">${codeDisplay}</span>
+                    <button class="invite-copy-btn" id="inviteCopyBtn" onclick="copyInviteCode('${inviteToken}')">📋 Copier</button>
+                </div>
+                ${meIsOwner ? `<button onclick="regenerateInviteCode('${spaceId}')" style="background:none;border:none;color:var(--text-muted);font-size:0.75rem;cursor:pointer;margin-top:8px;font-family:inherit">↺ Nouveau code</button>` : ''}
+            </div>
+        `;
+    } catch(e) {
+        document.getElementById('spaceMembersList').innerHTML = `<div style="color:var(--danger)">Erreur : ${e.message}</div>`;
+    }
+}
+
+function closeSpaceDetail(e) {
+    if (e && e.target !== document.getElementById('spaceDetailOverlay')) return;
+    document.getElementById('spaceDetailOverlay').classList.remove('show');
+}
+
+// Génère un code court 6 caractères (lettres majuscules + chiffres, sans ambiguïtés 0/O/I/1)
+function _generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+
+function copyInviteCode(rawCode) {
+    const display = rawCode.slice(0,2) + '-' + rawCode.slice(2,4) + '-' + rawCode.slice(4,6);
+    navigator.clipboard.writeText(display).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = display; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+    const btn = document.getElementById('inviteCopyBtn');
+    if (btn) { btn.textContent = '✅ Copié !'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '📋 Copier'; btn.classList.remove('copied'); }, 2500); }
+}
+
+async function regenerateInviteCode(spaceId) {
+    const { fbDb, doc, setDoc } = window._fb;
+    if (!confirm('Générer un nouveau code ? L\'ancien ne fonctionnera plus.')) return;
+    const newToken = _generateInviteCode();
+    await setDoc(doc(fbDb, 'shared', spaceId), { inviteToken: newToken }, { merge: true });
+    showToast('🔑 Nouveau code généré');
+    openSpaceDetail(spaceId, document.getElementById('spaceDetailTitle').textContent);
+}
+
+// Rejoindre un espace via code saisi manuellement
+async function joinByCode() {
+    const { fbDb, collection, query, where, getDocs, setDoc } = window._fb;
+    const raw  = (document.getElementById('joinCodeInput').value || '').replace(/-/g,'').trim().toUpperCase();
+    const errEl = document.getElementById('joinCodeError');
+    errEl.style.display = 'none';
+    if (raw.length !== 6) { errEl.textContent = 'Le code doit avoir 6 caractères (ex: K7-M3-X2).'; errEl.style.display = 'block'; return; }
+
+    const btn = document.getElementById('joinCodeBtn');
+    btn.disabled = true; btn.textContent = '…';
+
+    try {
+        const q    = query(collection(fbDb, 'shared'), where('inviteToken', '==', raw));
+        const snap = await getDocs(q);
+        if (snap.empty) { errEl.textContent = 'Code invalide ou expiré.'; errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Rejoindre'; return; }
+
+        const spaceDoc = snap.docs[0];
+        const data     = spaceDoc.data();
+
+        if ((data.members || []).includes(currentUser.uid)) {
+            errEl.textContent = 'Vous êtes déjà membre de cet espace !';
+            errEl.style.display = 'block';
+            btn.disabled = false; btn.textContent = 'Rejoindre';
+            return;
+        }
+
+        const members = [...new Set([...(data.members || []), currentUser.uid])];
+        await setDoc(spaceDoc.ref, { members }, { merge: true });
+
+        document.getElementById('joinCodeInput').value = '';
+        document.getElementById('shareOverlay').classList.remove('show');
+        showToast(`✅ Vous avez rejoint « ${data.name} » !`);
+        switchToSpace(spaceDoc.id, data.name);
+    } catch(e) {
+        errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Rejoindre';
+    }
+}
+
+// Fonctions dépréciées (plus utilisées mais gardées pour éviter erreurs)
+async function checkInviteLink() { /* remplacé par code court */ }
+async function joinSpaceFromInvite() { /* remplacé par code court */ }
+function showJoinBanner() { /* remplacé par code court */ }
+async function acceptJoinSpace() { /* remplacé par code court */ }
+async function addMemberToSpace() { /* remplacé par code court */ }
+function copyInviteLink() { /* remplacé par copyInviteCode */ }
+
+async function removeMember(spaceId, uid) {
+    const { fbDb, doc, getDoc, setDoc } = window._fb;
+    if (!confirm('Retirer ce membre ?')) return;
+    const snap    = await getDoc(doc(fbDb, 'shared', spaceId));
+    const members = (snap.data()?.members || []).filter(m => m !== uid);
+    await setDoc(doc(fbDb, 'shared', spaceId), { members }, { merge: true });
+    openSpaceDetail(spaceId, document.getElementById('spaceDetailTitle').textContent);
+    showToast('Membre retiré');
+}
+
+async function leaveSpace() {
+    const { fbDb, doc, getDoc, setDoc, deleteDoc } = window._fb;
+    const spaceRef = doc(fbDb, 'shared', currentSpaceDetail);
+    const snap     = await getDoc(spaceRef);
+    const data     = snap.data() || {};
+    const isOwner  = data.createdBy === currentUser.uid;
+
+    if (isOwner) {
+        if (!confirm('Supprimer définitivement cet espace et toutes ses notes ?')) return;
+        await deleteDoc(doc(fbDb, 'shared', currentSpaceDetail, 'data', 'main'));
+        await deleteDoc(spaceRef);
+        showToast('🗑️ Espace supprimé');
+    } else {
+        if (!confirm('Quitter cet espace ?')) return;
+        const members = (data.members || []).filter(m => m !== currentUser.uid);
+        await setDoc(spaceRef, { members }, { merge: true });
+        showToast('Vous avez quitté l\'espace');
+    }
+    if (currentSpaceId === currentSpaceDetail) switchToSpace(null, null);
+    closeSpaceDetail();
+    document.getElementById('shareOverlay').classList.remove('show');
+}
+
+
+function getFormattedDate() {
+    const d = new Date();
+    const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const dayStr = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+    return `${dateStr} ${dayStr.charAt(0).toUpperCase() + dayStr.slice(1)}`;
+}
+
+function setView(view) {
+    currentView = view;
+    document.getElementById('tabActive').classList.toggle('active', view === 'active');
+    document.getElementById('tabArchive').classList.toggle('active', view === 'archive');
+    document.getElementById('tabToday').classList.toggle('active', view === 'today');
+    // Afficher/masquer le header "Aujourd'hui"
+    const todayHeader = document.getElementById('todayHeader');
+    todayHeader.style.display = view === 'today' ? 'flex' : 'none';
+    if (view === 'today') {
+        const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+        document.getElementById('todayDateLabel').textContent = today.charAt(0).toUpperCase() + today.slice(1);
+    }
+    renderNotes();
+}
+
+function updateBadges() {
+    const activeCount  = (state.notes    || []).length;
+    const archiveCount = (state.archived || []).length;
+    const todayCount   = (state.today    || []).filter(id => state.notes.some(n => n.id === id)).length;
+    const ba = document.getElementById('badgeActive');
+    const bb = document.getElementById('badgeArchive');
+    const bt = document.getElementById('badgeToday');
+    if (ba) { ba.textContent = activeCount;  ba.classList.toggle('visible', activeCount > 0); }
+    if (bb) { bb.textContent = archiveCount; bb.classList.toggle('visible', archiveCount > 0); }
+    if (bt) { bt.textContent = todayCount;   bt.classList.toggle('visible', todayCount > 0); }
+}
+
+function sortList(list) {
+    if (currentSort === 'title') return list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'fr'));
+    if (currentSort === 'color') return list.sort((a, b) => (a.color || '').localeCompare(b.color || ''));
+    return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+function renderNotes() {
+    updateBadges();
+    const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+    const container = document.getElementById('notesList');
+
+    // --- Vue AUJOURD'HUI ---
+    if (currentView === 'today') {
+        const todayIds = state.today || [];
+        // Résoudre les IDs vers les notes (conserver l'ordre, exclure les supprimées)
+        let list = todayIds.map(id => state.notes.find(n => n.id === id)).filter(Boolean);
+        if (q) list = list.filter(n => (n.title||'').toLowerCase().includes(q) || (n.body||'').toLowerCase().includes(q));
+        document.getElementById('notesCount').textContent = list.length ? `${list.length} note${list.length > 1 ? 's' : ''}` : '';
+        if (todayIds.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucune note pour aujourd'hui.<br>Depuis les notes actives, appuyez sur 📅 pour en ajouter.</div></div>`;
+            return;
+        }
+        if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
+        container.innerHTML = list.map((n, i) => `
+            <div class="note-row" style="animation-delay:${i*0.05}s">
+                <div class="note-strip" style="background:${n.color}"></div>
+                <div class="note-row-content" onclick="openEditor('${n.id}')">
+                    <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+                </div>
+                <div class="note-actions">
+                    <button class="nact-btn nact-up" onclick="event.stopPropagation(); moveTodayNote('${n.id}', -1)" title="Monter" ${i === 0 ? 'style="opacity:0.2;pointer-events:none"' : ''}>▲</button>
+                    <button class="nact-btn nact-dn" onclick="event.stopPropagation(); moveTodayNote('${n.id}', 1)" title="Descendre" ${i === list.length-1 ? 'style="opacity:0.2;pointer-events:none"' : ''}>▼</button>
+                    <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}')" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Ajouter une adresse'}">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                    </button>
+                    <button class="nact-btn nact-today" onclick="event.stopPropagation(); toggleToday('${n.id}')" title="Retirer d'aujourd'hui" style="color:var(--accent)">📅</button>
+                </div>
+            </div>`).join('');
+        return;
+    }
+
+    // --- Vue ARCHIVE ---
+    if (currentView === 'archive') {
+        const pool = state.archived || [];
+        let list = q ? pool.filter(n => (n.title||'').toLowerCase().includes(q) || (n.body||'').toLowerCase().includes(q)) : [...pool];
+        sortList(list);
+        document.getElementById('notesCount').textContent = pool.length ? `${pool.length} note${pool.length > 1 ? 's' : ''}` : '';
+        if (pool.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucune note archivée.</div></div>`; return; }
+        if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
+        container.innerHTML = list.map((n, i) => `
+            <div class="note-row archived" style="animation-delay:${i*0.05}s">
+                <div class="note-strip" style="background:${n.color}"></div>
+                <div class="note-row-content" onclick="openEditor('${n.id}', true)">
+                    <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+                </div>
+                <div class="note-actions">
+                    <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}', true)" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Voir l\'adresse'}">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                    </button>
+                    <button class="nact-btn restore" onclick="event.stopPropagation(); restoreNote('${n.id}')" title="Restaurer">♻️</button>
+                    <button class="nact-btn danger" onclick="event.stopPropagation(); deleteNote('${n.id}', true)" title="Supprimer définitivement">🗑️</button>
+                </div>
+            </div>`).join('');
+        return;
+    }
+
+    // --- Vue ACTIVES ---
+    const pool = state.notes || [];
+    let list = q ? pool.filter(n => (n.title||'').toLowerCase().includes(q) || (n.body||'').toLowerCase().includes(q)) : [...pool];
+    sortList(list);
+    document.getElementById('notesCount').textContent = pool.length ? `${pool.length} note${pool.length > 1 ? 's' : ''}` : '';
+    if (pool.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucune note. Appuyez sur <strong>+</strong>.</div></div>`; return; }
+    if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
+    container.innerHTML = list.map((n, i) => {
+        const inToday = (state.today || []).includes(n.id);
+        return `<div class="note-row${inToday ? ' in-today' : ''}" style="animation-delay:${i*0.05}s">
+            <div class="note-strip" style="background:${n.color}"></div>
+            <div class="note-row-content" onclick="openEditor('${n.id}')">
+                <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+            </div>
+            <div class="note-actions">
+                <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}')" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Ajouter une adresse'}">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                </button>
+                <button class="nact-btn nact-today" onclick="event.stopPropagation(); toggleToday('${n.id}')" title="${inToday ? 'Retirer d\'aujourd\'hui' : 'Ajouter à aujourd\'hui'}" style="${inToday ? 'color:var(--accent)' : ''}">📅</button>
+                <button class="nact-btn" onclick="event.stopPropagation(); archiveNote('${n.id}')" title="Archiver">📦</button>
+                <button class="nact-btn danger" onclick="event.stopPropagation(); deleteNote('${n.id}')" title="Supprimer">🗑️</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// --- Editor ---
+function openEditor(id, fromArchive = false) {
+    editingNoteId = id;
+    const ov = document.getElementById('editorOverlay');
+    
+    if (id) {
+        const pool = fromArchive ? (state.archived || []) : (state.notes || []);
+        const n = pool.find(x => x.id === id);
+        if (!n) return;
+        // Snapshot avant édition (une seule fois à l'ouverture)
+        if (!fromArchive) snapshotState('Édition : ' + (n.title || 'Sans titre'));
+        document.getElementById('editorTitle').value = n.title || '';
+        currentColor = n.color || NOTE_COLORS[0];
+        paragraphs = n.body ? n.body.split('\n\n---PARA_SEP---\n\n') : [''];
+        // Les notes archivées s'ouvrent en lecture seule
+        document.getElementById('editorTitle').readOnly = fromArchive;
+        document.querySelector('.editor-toolbar').style.display = fromArchive ? 'none' : '';
+    } else {
+        document.getElementById('editorTitle').readOnly = false;
+        document.querySelector('.editor-toolbar').style.display = '';
+        document.getElementById('editorTitle').value = '';
+        currentColor = NOTE_COLORS[0];
+        paragraphs = [getFormattedDate() + '\n'];
+    }
+    
+    updateColorUI();
+    renderSwatches();
+    renderEditor();
+    ov.classList.add('show');
+    closeSidePanel();
+
+    // Réinitialiser la pile undo locale de l'éditeur
+    editorUndoStack = [];
+    clearTimeout(editorUndoTimer);
+    updateEditorUndoBtn();
+    // Snapshot initial
+    setTimeout(() => snapshotEditor(true), 50);
+    // Mettre à jour le bouton GPS dans l'éditeur
+    setTimeout(() => _refreshEditorGpsBtn(), 60);
+
+    // Pousser un état pour que le bouton retour Android puisse revenir à la liste
+    pushEditorState();
+
+    // Scroll en haut immédiatement
+    const scroller = document.querySelector('.editor-scroll');
+    if (scroller) scroller.scrollTop = 0;
+
+    if (!id) {
+        // Nouvelle note uniquement : on focus et positionne le curseur
+        setTimeout(() => {
+            activeParaIndex = 0;
+            const ta = document.querySelector('.paragraph-input[data-idx="0"]');
+            if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+        }, 120);
+    }
+    // Note existante : aucun focus, aucune sélection → pas de clavier
+}
+
+function renderEditor() {
+    const body = document.getElementById('editorBody');
+    // Affichage en ordre DÉCROISSANT : la dernière séance en haut
+    // On crée une liste d'index inversés pour l'affichage, mais data-idx pointe toujours sur le bon index dans paragraphs[]
+    const indices = paragraphs.map((_, i) => i).reverse();
+    body.innerHTML = indices.map((i, displayPos) => `
+        <div class="paragraph-block" id="para-${i}">
+            ${displayPos > 0 ? '<div class="paragraph-separator"></div>' : ''}
+            <textarea class="paragraph-input" 
+                data-idx="${i}" 
+                placeholder="Écrivez ici..."
+                onfocus="activeParaIndex=${i}"
+                oninput="updatePara(${i}, this.value); autoResize(this);">${escHtml(paragraphs[i])}</textarea>
+        </div>
+    `).join('');
+    
+    body.querySelectorAll('textarea').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
+}
+
+function autoResize(el) {
+    const scroller = document.querySelector('.editor-scroll');
+    const scrollTop = scroller ? scroller.scrollTop : 0;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+    if (scroller) scroller.scrollTop = scrollTop;
+}
+function updatePara(idx, val) { paragraphs[idx] = val; scheduleEditorSnapshot(); autoSave(); }
+
+function addParagraph() {
+    snapshotEditor(true); // snapshot avant ajout séance
+    paragraphs.push(getFormattedDate() + '\n');
+    renderEditor();
+    
+    setTimeout(() => {
+        const idx = paragraphs.length - 1;
+        activeParaIndex = idx;
+        const ta = document.querySelector(`.paragraph-input[data-idx="${idx}"]`);
+        if (ta) {
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+        }
+    }, 100);
+}
+
+function closeEditor() {
+    if (isRecording) toggleMic();
+    // Flush la sauvegarde en cours si timer actif
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+    const title = document.getElementById('editorTitle').value.trim() || 'Sans titre';
+    const body = paragraphs.join('\n\n---PARA_SEP---\n\n');
+    if (editingNoteId) {
+        const n = state.notes.find(x => x.id === editingNoteId);
+        if (n) { n.title = title; n.body = body; n.color = currentColor; n.updatedAt = Date.now(); }
+        save(); renderNotes();
+    } else if (title !== 'Sans titre' || paragraphs.some(p => p.trim())) {
+        // Nouvelle note non encore sauvegardée : on la crée si elle a du contenu
+        snapshotState('Nouvelle note');
+        const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        state.notes.unshift({ id: newId, title, body, color: currentColor, createdAt: Date.now(), updatedAt: Date.now() });
+        save(); renderNotes();
+    }
+    document.getElementById('editorOverlay').classList.remove('show');
+}
+
+// --- Sauvegarde automatique ---
+let autoSaveTimer = null;
+
+// --- Undo éditeur (local à la note ouverte) ---
+let editorUndoStack = [];
+let editorUndoTimer = null;
+const EDITOR_UNDO_MAX = 50;
+
+function snapshotEditor(force = false) {
+    // Prend un snapshot du contenu actuel de l'éditeur pour l'undo local
+    const title = document.getElementById('editorTitle')?.value || '';
+    const snap = { title, paragraphs: [...paragraphs] };
+    // Évite les doublons consécutifs identiques
+    const last = editorUndoStack[editorUndoStack.length - 1];
+    if (!force && last && last.title === title && JSON.stringify(last.paragraphs) === JSON.stringify(paragraphs)) return;
+    editorUndoStack.push(snap);
+    if (editorUndoStack.length > EDITOR_UNDO_MAX) editorUndoStack.shift();
+    updateEditorUndoBtn();
+}
+
+function scheduleEditorSnapshot() {
+    clearTimeout(editorUndoTimer);
+    editorUndoTimer = setTimeout(() => snapshotEditor(), 1500);
+}
+
+function undoEditor() {
+    if (editorUndoStack.length === 0) return;
+    const snap = editorUndoStack.pop();
+    paragraphs = [...snap.paragraphs];
+    document.getElementById('editorTitle').value = snap.title;
+    renderEditor();
+    updateEditorUndoBtn();
+}
+
+function updateEditorUndoBtn() {
+    const btn = document.getElementById('editorUndoBtn');
+    if (!btn) return;
+    btn.disabled = editorUndoStack.length === 0;
+    btn.style.opacity = editorUndoStack.length === 0 ? '0.35' : '1';
+    btn.title = editorUndoStack.length > 0 ? `Annuler (${editorUndoStack.length} étape${editorUndoStack.length > 1 ? 's' : ''})` : 'Rien à annuler';
+}
+
+function autoSave() {
+    // Indicateur "en cours"
+    const ind = document.getElementById('autosaveIndicator');
+    if (ind) { ind.className = 'autosave-indicator saving'; }
+
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+        const title = document.getElementById('editorTitle').value.trim() || 'Sans titre';
+        const body = paragraphs.join('\n\n---PARA_SEP---\n\n');
+
+        if (editingNoteId) {
+            const n = state.notes.find(x => x.id === editingNoteId);
+            if (n) { n.title = title; n.body = body; n.color = currentColor; n.updatedAt = Date.now(); }
+        } else {
+            // Première sauvegarde d'une nouvelle note : on crée l'entrée et on retient son id
+            const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+            editingNoteId = newId;
+            state.notes.unshift({
+                id: newId, title, body, color: currentColor,
+                createdAt: Date.now(), updatedAt: Date.now()
+            });
+        }
+        save();
+        renderNotes();
+
+        // Indicateur "sauvegardé"
+        if (ind) {
+            ind.className = 'autosave-indicator saved';
+            setTimeout(() => { ind.className = 'autosave-indicator'; }, 1500);
+        }
+    }, 800);
+}
+
+function saveNote() { autoSave(); } // Compatibilité si appelé ailleurs
+
+function archiveNote(id) {
+    snapshotState('Archivage note');
+    const idx = state.notes.findIndex(n => n.id === id);
+    if (idx === -1) return;
+    const [note] = state.notes.splice(idx, 1);
+    note.archivedAt = Date.now();
+    if (!state.archived) state.archived = [];
+    state.archived.unshift(note);
+    // Retirer de Aujourd'hui si présente
+    state.today = (state.today || []).filter(tid => tid !== id);
+    save(); renderNotes();
+}
+
+function restoreNote(id) {
+    snapshotState('Restauration note');
+    const idx = (state.archived || []).findIndex(n => n.id === id);
+    if (idx === -1) return;
+    const [note] = state.archived.splice(idx, 1);
+    delete note.archivedAt;
+    note.updatedAt = Date.now();
+    state.notes.unshift(note);
+    save(); renderNotes();
+}
+
+function deleteNote(id, fromArchive = false) {
+    if (!confirm('Supprimer définitivement ?')) return;
+    snapshotState('Suppression note');
+    if (fromArchive) {
+        state.archived = (state.archived || []).filter(n => n.id !== id);
+    } else {
+        state.notes = state.notes.filter(n => n.id !== id);
+        // Retirer de Aujourd'hui si présente
+        state.today = (state.today || []).filter(tid => tid !== id);
+    }
+    save(); renderNotes();
+}
+
+// --- GPS / Adresse ---
+let gpsCurrentNoteId = null;
+let gpsFromArchive   = false;
+let nominatimTimer   = null;
+
+// Ouvrir depuis un bouton dans la liste
+function openGpsModalForNote(id, fromArchive = false) {
+    gpsCurrentNoteId = id;
+    gpsFromArchive   = fromArchive;
+    const pool = fromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === id);
+    const addrs = n?.addresses || (n?.address ? [n.address] : []);
+    _openGpsModal(addrs, n?.addressNote || '', n?.phones || []);
+}
+
+function openGpsModal() {
+    if (editingNoteId) {
+        gpsCurrentNoteId = editingNoteId;
+        gpsFromArchive   = false;
+        const n = state.notes.find(x => x.id === editingNoteId);
+        const addrs = n?.addresses || (n?.address ? [n.address] : []);
+        _openGpsModal(addrs, n?.addressNote || '', n?.phones || []);
+    } else {
+        gpsCurrentNoteId = null;
+        gpsFromArchive   = false;
+        _openGpsModal([], '', []);
+    }
+}
+
+function _openGpsModal(existingAddresses, existingNote = '', existingPhones = []) {
+    document.getElementById('gpsNoteInput').value = existingNote;
+    document.getElementById('gpsSuggestions').style.display = 'none';
+    document.getElementById('gpsSuggestions').innerHTML = '';
+    document.getElementById('gpsAddressInput').value = '';
+    hideGpsSearchField();
+
+    const titleEl = document.getElementById('gpsNoteTitle');
+    if (gpsCurrentNoteId) {
+        const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+        const n    = pool.find(x => x.id === gpsCurrentNoteId);
+        titleEl.textContent = n?.title?.trim() || '(sans titre)';
+        titleEl.style.display = 'block';
+    } else {
+        titleEl.style.display = 'none';
+    }
+
+    _renderAddressList(existingAddresses);
+    _renderPhoneList(existingPhones);
+    document.getElementById('gpsOverlay').classList.add('show');
+    history.pushState({ screen: 'gps' }, '');
+}
+
+// --- Adresses multiples ---
+function _getCurrentAddresses() {
+    if (!gpsCurrentNoteId) return [];
+    const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === gpsCurrentNoteId);
+    if (!n) return [];
+    if (!n.addresses && n.address) return [n.address];
+    return JSON.parse(JSON.stringify(n.addresses || []));
+}
+
+function _saveAddresses(addresses) {
+    if (!gpsCurrentNoteId) return;
+    const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === gpsCurrentNoteId);
+    if (!n) return;
+    n.addresses = addresses;
+    n.address   = addresses[0] || '';
+    n.updatedAt = Date.now();
+    save();
+    renderNotes();
+    _refreshEditorGpsBtn();
+}
+
+function _renderAddressList(addresses) {
+    const list = document.getElementById('gpsAddressList');
+    if (!addresses.length) { list.innerHTML = ''; return; }
+    list.innerHTML = addresses.map((addr, i) => `
+        <div class="address-row" id="addrRow_${i}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            <span class="address-row-text" title="${escHtml(addr)}">${escHtml(addr)}</span>
+            <button class="address-nav-btn" onclick="launchNavigationTo(${i})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            </button>
+            <button class="phone-delete-btn" onclick="deleteAddress(${i})" title="Supprimer">✕</button>
+        </div>`).join('');
+}
+
+function showGpsSearchField() {
+    document.getElementById('gpsSearchArea').style.display = 'block';
+    document.getElementById('gpsAddAddressBtn').style.display = 'none';
+    setTimeout(() => document.getElementById('gpsAddressInput').focus(), 100);
+}
+
+function hideGpsSearchField() {
+    const sa = document.getElementById('gpsSearchArea');
+    const ab = document.getElementById('gpsAddAddressBtn');
+    if (sa) sa.style.display = 'none';
+    if (ab) ab.style.display = 'block';
+    const inp = document.getElementById('gpsAddressInput');
+    if (inp) inp.value = '';
+    const sug = document.getElementById('gpsSuggestions');
+    if (sug) { sug.style.display = 'none'; sug.innerHTML = ''; }
+    clearTimeout(nominatimTimer);
+}
+
+function addAddressToList(addr) {
+    if (!addr || !addr.trim()) return;
+    const addresses = _getCurrentAddresses();
+    addresses.push(addr.trim());
+    _saveAddresses(addresses);
+    _renderAddressList(addresses);
+    hideGpsSearchField();
+}
+
+function deleteAddress(idx) {
+    const addresses = _getCurrentAddresses();
+    addresses.splice(idx, 1);
+    _saveAddresses(addresses);
+    _renderAddressList(addresses);
+}
+
+function launchNavigationTo(idx) {
+    const addresses = _getCurrentAddresses();
+    const addr = addresses[idx];
+    if (!addr) return;
+    const encoded = encodeURIComponent(addr);
+    if (/Android/i.test(navigator.userAgent)) {
+        window.open(`geo:0,0?q=${encoded}`, '_blank');
+    } else {
+        window.open(`https://maps.apple.com/?daddr=${encoded}`, '_blank');
+    }
+}
+
+function closeGpsModal(e) {
+    if (e && e.target !== document.getElementById('gpsOverlay')) return;
+    document.getElementById('gpsOverlay').classList.remove('show');
+    hideGpsSearchField();
+    clearTimeout(nominatimTimer);
+}
+
+function _updateGpsCurrentDisplay() {}
+function _updateNavigateBtn() {}
+
+function saveGpsAddress(addr) {
+    const addresses = addr ? [addr] : [];
+    _saveAddresses(addresses);
+}
+
+let _gpsNoteTimer = null;
+function saveGpsNote(value) {
+    clearTimeout(_gpsNoteTimer);
+    _gpsNoteTimer = setTimeout(() => {
+        if (!gpsCurrentNoteId) return;
+        const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+        const n    = pool.find(x => x.id === gpsCurrentNoteId);
+        if (!n) return;
+        n.addressNote = value;
+        n.updatedAt   = Date.now();
+        save();
+    }, 600);
+}
+
+// --- Gestion des numéros de téléphone GPS ---
+const PHONE_TYPES = ['Domicile', 'Mobile', 'Travail'];
+
+function _renderPhoneList(phones) {
+    const list = document.getElementById('gpsPhoneList');
+    if (!phones.length) { list.innerHTML = ''; return; }
+    list.innerHTML = phones.map((p, i) => _phoneRowHTML(p.number, p.type, i)).join('');
+}
+
+function _phoneRowHTML(number, type, idx) {
+    const stdTypes = ['Domicile', 'Mobile', 'Travail'];
+    const isEditing = type === '__editing__';
+    const isCustom  = !isEditing && type && !stdTypes.includes(type);
+
+    const typeWidget = (isCustom || isEditing)
+        ? `<input class="phone-type-custom" id="phoneTypeWidget_${idx}"
+                type="text" placeholder="Type…" maxlength="20"
+                value="${isCustom ? escHtml(type) : ''}"
+                onblur="commitCustomType(${idx}, this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">`
+        : `<select class="phone-type-select" id="phoneTypeWidget_${idx}"
+                onchange="updatePhoneType(${idx}, this.value)">
+                ${stdTypes.map(t => `<option value="${t}"${t === (type||'Domicile') ? ' selected' : ''}>${t}</option>`).join('')}
+                <option value="__custom__">Autre…</option>
+           </select>`;
+
+    const hasNumber = number && number.trim();
+    if (hasNumber) {
+        return `<div class="phone-row" id="phoneRow_${idx}">
+            <button class="phone-number-btn" onclick="callPhone('${number.replace(/'/g,"\'")}', ${idx})" title="Appeler ${number}">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5" style="margin-right:6px;vertical-align:middle"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.16 6.16l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>${escHtml(number)}
+            </button>
+            ${typeWidget}
+            <button class="phone-delete-btn" onclick="deletePhoneRow(${idx})" title="Supprimer">✕</button>
+        </div>`;
+    } else {
+        return `<div class="phone-row" id="phoneRow_${idx}">
+            <input class="phone-number-input" type="tel" placeholder="Ex : 06 12 34 56 78"
+                value="${escHtml(number)}"
+                onblur="savePhoneNumber(${idx}, this.value)"
+                onkeydown="if(event.key==='Enter'){this.blur()}"
+                id="phoneInput_${idx}">
+            ${typeWidget}
+            <button class="phone-delete-btn" onclick="deletePhoneRow(${idx})" title="Supprimer">✕</button>
+        </div>`;
+    }
+}
+
+function addPhoneRow() {
+    const phones = _getCurrentPhones();
+    phones.push({ number: '', type: 'Domicile' });
+    _savePhones(phones);
+    _renderPhoneList(phones);
+    setTimeout(() => {
+        const input = document.getElementById(`phoneInput_${phones.length - 1}`);
+        if (input) input.focus();
+    }, 50);
+}
+
+function callPhone(number) {
+    window.location.href = `tel:${number.replace(/\s/g, '')}`;
+}
+
+function savePhoneNumber(idx, value) {
+    const phones = _getCurrentPhones();
+    if (!phones[idx]) return;
+    phones[idx].number = value.trim();
+    _savePhones(phones);
+    _renderPhoneList(phones);
+}
+
+function updatePhoneType(idx, value) {
+    const phones = _getCurrentPhones();
+    if (!phones[idx]) return;
+    if (value === '__custom__') {
+        // Valeur sentinelle : force l'affichage de l'input texte sans re-render
+        phones[idx].type = '__editing__';
+        _savePhones(phones);
+        _renderPhoneList(phones);
+        setTimeout(() => {
+            const el = document.getElementById(`phoneTypeWidget_${idx}`);
+            if (el) { el.value = ''; el.focus(); }
+        }, 30);
+    } else {
+        phones[idx].type = value;
+        _savePhones(phones);
+    }
+}
+
+function commitCustomType(idx, value) {
+    const phones = _getCurrentPhones();
+    if (!phones[idx]) return;
+    phones[idx].type = value.trim() || 'Domicile';
+    _savePhones(phones);
+    _renderPhoneList(phones);
+}
+
+function saveCustomPhoneType(idx, value) {
+    const phones = _getCurrentPhones();
+    if (!phones[idx]) return;
+    phones[idx].type = value.trim() || 'Domicile';
+    _savePhones(phones);
+}
+
+function deletePhoneRow(idx) {
+    const phones = _getCurrentPhones();
+    phones.splice(idx, 1);
+    _renderPhoneList(phones);
+    _savePhones(phones);
+}
+
+function _getCurrentPhones() {
+    if (!gpsCurrentNoteId) return [];
+    const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === gpsCurrentNoteId);
+    return n ? JSON.parse(JSON.stringify(n.phones || [])) : [];
+}
+
+function _savePhones(phones) {
+    if (!gpsCurrentNoteId) return;
+    const pool = gpsFromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === gpsCurrentNoteId);
+    if (!n) return;
+    n.phones = phones;
+    n.updatedAt = Date.now();
+    save();
+}
+
+function _refreshEditorGpsBtn() {
+    const btn = document.getElementById('editorGpsBtn');
+    if (!btn) return;
+    const n = state.notes.find(x => x.id === editingNoteId);
+    btn.classList.toggle('gps-active', !!(n?.address || (n?.addresses && n.addresses.length)));
+    btn.title = n?.address ? `Adresse : ${n.address}` : 'Adresse / Navigation';
+}
+
+function clearGpsAddress() {
+    _saveAddresses([]);
+    _renderAddressList([]);
+    document.getElementById('gpsNoteInput').value = '';
+    _renderPhoneList([]);
+    _savePhones([]);
+    saveGpsNote('');
+    hideGpsSearchField();
+}
+
+// Lancer la navigation (compat)
+function launchNavigation() { launchNavigationTo(0); }
+
+// --- Nominatim Autocomplete ---
+function onGpsInput(value) {
+    const addr = value.trim();
+    _updateNavigateBtn(addr);
+    clearTimeout(nominatimTimer);
+    const sug = document.getElementById('gpsSuggestions');
+    if (addr.length < 4) { sug.style.display = 'none'; return; }
+    // Debounce 450ms
+    nominatimTimer = setTimeout(() => fetchNominatim(addr), 450);
+}
+
+// Tableau temporaire des adresses suggestions (évite les problèmes d'échappement inline)
+let _nominatimResults = [];
+
+// Construit une adresse courte et propre depuis les champs Nominatim
+function _buildCleanAddress(item) {
+    const a = item.address || {};
+    const parts = [];
+    // Numéro + rue (ou lieu-dit / hameau)
+    const street = [a.house_number, a.road || a.hamlet || a.locality].filter(Boolean).join(' ');
+    if (street) parts.push(street);
+    // Code postal
+    if (a.postcode) parts.push(a.postcode);
+    // Commune
+    const city = a.city || a.town || a.village || a.municipality || a.county;
+    if (city) parts.push(city);
+    // Pays (seulement si pas France pour garder court)
+    if (a.country && a.country !== 'France' && a.country !== 'France métropolitaine') parts.push(a.country);
+    // Fallback : prendre les 3 premiers segments du display_name
+    if (parts.length === 0) {
+        return item.display_name.split(',').slice(0, 3).map(s => s.trim()).join(', ');
+    }
+    return parts.join(', ');
+}
+
+async function fetchNominatim(query) {
+    const sug = document.getElementById('gpsSuggestions');
+    sug.innerHTML = `<div class="gps-searching">🔍 Recherche en cours…</div>`;
+    sug.style.display = 'block';
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=6&accept-language=fr`;
+        const res  = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+        const data = await res.json();
+        if (!data.length) {
+            sug.innerHTML = `<div class="gps-searching">Aucun résultat trouvé</div>`;
+            _nominatimResults = [];
+            return;
+        }
+        // Stocker les adresses COURTES (pas le display_name complet)
+        _nominatimResults = data.map(item => _buildCleanAddress(item));
+        sug.innerHTML = data.map((item, idx) => {
+            const a    = item.address || {};
+            const main = [a.house_number, a.road || a.hamlet || a.locality].filter(Boolean).join(' ') || item.display_name.split(',')[0];
+            const sub  = [a.postcode, a.city || a.town || a.village || a.municipality, a.country_code?.toUpperCase()].filter(Boolean).join(' · ');
+            return `<div class="gps-suggestion-item" onclick="selectGpsSuggestion(${idx})">
+                <svg class="gps-suggestion-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                <div><div class="gps-suggestion-main">${escHtml(main)}</div><div class="gps-suggestion-sub">${escHtml(sub)}</div></div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        sug.innerHTML = `<div class="gps-searching">Pas de connexion internet</div>`;
+        _nominatimResults = [];
+    }
+}
+
+function selectGpsSuggestion(idx) {
+    const fullAddress = _nominatimResults[idx];
+    if (!fullAddress) return;
+    document.getElementById('gpsAddressInput').value = fullAddress;
+    document.getElementById('gpsSuggestions').style.display = 'none';
+    _nominatimResults = [];
+    addAddressToList(fullAddress);
+}
+function toggleToday(id) {
+    if (!state.today) state.today = [];
+    const idx = state.today.indexOf(id);
+    if (idx === -1) {
+        state.today.push(id);
+        showToast('📅 Ajouté à Aujourd\'hui');
+    } else {
+        state.today.splice(idx, 1);
+        showToast('Retiré d\'Aujourd\'hui');
+    }
+    save();
+    renderNotes();
+}
+
+function moveTodayNote(id, dir) {
+    const arr = state.today || [];
+    const idx = arr.indexOf(id);
+    if (idx === -1) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= arr.length) return;
+    // Swap
+    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+    state.today = arr;
+    save();
+    renderNotes();
+}
+
+function clearToday() {
+    if (!state.today || state.today.length === 0) return;
+    if (!confirm('Vider la liste Aujourd\'hui ? Les notes restent dans les actives.')) return;
+    state.today = [];
+    save();
+    renderNotes();
+    showToast('📅 Journée vidée');
+}
+function toggleColorPicker() {
+    const popup = document.getElementById('colorPopup');
+    popup.classList.toggle('show');
+}
+
+function updateColorUI() {
+    document.getElementById('colorPreviewDot').style.background = currentColor;
+    // Met à jour le triangle couleur dans le header de l'éditeur
+    document.querySelector('.editor-header').style.setProperty('--note-color', currentColor);
+}
+
+function renderSwatches() {
+    const popup = document.getElementById('colorPopup');
+    popup.innerHTML = NOTE_COLORS.map(c => 
+        `<div class="swatch ${c===currentColor ? 'active':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
+    ).join('');
+    // Close when clicking outside
+    document.body.onclick = (e) => {
+        if (!e.target.closest('.color-btn')) popup.classList.remove('show');
+    };
+}
+
+function selectColor(c) {
+    currentColor = c;
+    updateColorUI();
+    renderSwatches();
+    document.getElementById('colorPopup').classList.remove('show');
+    autoSave();
+}
+
+// --- Side Panel ---
+function openSidePanel() {
+    updateParaList();
+    document.getElementById('sideOverlay').classList.add('show');
+    document.getElementById('sidePanel').classList.add('show');
+}
+function closeSidePanel() {
+    document.getElementById('sideOverlay').classList.remove('show');
+    document.getElementById('sidePanel').classList.remove('show');
+}
+
+function updateParaList() {
+    const list = document.getElementById('paraList');
+    // Ordre décroissant : séance la plus récente en premier
+    const indices = paragraphs.map((_, i) => i).reverse();
+    list.innerHTML = indices.map(i => {
+        const p = paragraphs[i];
+        const preview = p.trim().split('\n')[0] || 'Séance vide';
+        return `<div class="para-item-card" onclick="goToPara(${i})">
+            <span class="para-num">Séance ${i + 1}</span>
+            <div class="para-preview">${escHtml(preview.substring(0, 50))}</div>
+        </div>`;
+    }).join('');
+}
+
+function goToPara(idx) {
+    closeSidePanel();
+    const el = document.getElementById('para-' + idx);
+    const scroller = document.querySelector('.editor-scroll');
+    if (el && scroller) {
+        // On veut que le DÉBUT du bloc soit collé en haut de la zone de scroll
+        const elTop = el.offsetTop;
+        scroller.scrollTo({ top: elTop - 16, behavior: 'smooth' });
+        setTimeout(() => el.querySelector('textarea').focus(), 350);
+    }
+}
+
+// --- Voice Transcription ---
+// Stratégie : continuous: FALSE — sessions courtes qui se relancent automatiquement.
+// Chaque session produit UN SEUL résultat final. Aucun historique à gérer, zéro doublon possible.
+// recCommitted accumule les phrases finales session après session.
+// recInterim affiche ce qui est en cours de reconnaissance en temps réel.
+
+function toggleMic() {
+    if (isRecording) stopRec();
+    else startRec();
+}
+
+function startRec() {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        return alert('Reconnaissance vocale non supportée. Utilisez Chrome.');
+    }
+
+    // Snapshot du texte déjà présent dans le paragraphe comme point de départ
+    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
+    const existing = (ta ? ta.value : paragraphs[activeParaIndex] || '').trimEnd();
+    recCommitted = existing;
+    recInterim = '';
+
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('recStatus').classList.add('active');
+
+    launchSession();
+}
+
+function launchSession() {
+    if (!isRecording) return;
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRec();
+
+    // continuous: FALSE — c'est la clé.
+    // Chaque session s'arrête après une phrase. Pas de cumul, pas de doublon.
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'fr-FR';
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event) => {
+        // Avec continuous:false, event.results contient au plus 1 résultat
+        // On affiche l'interim en temps réel, et on l'intègre quand isFinal
+        recInterim = '';
+        for (let i = 0; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript.trim();
+            if (event.results[i].isFinal) {
+                // Phrase validée : on l'ajoute au texte commis
+                recCommitted += (recCommitted ? ' ' : '') + t;
+                recInterim = '';
+            } else {
+                recInterim = t;
+            }
+        }
+        updateTextarea();
+    };
+
+    recognition.onerror = (e) => {
+        if (e.error === 'no-speech' || e.error === 'aborted') return;
+        console.error('Erreur Speech:', e.error);
+        stopRec();
+    };
+
+    recognition.onend = () => {
+        recInterim = ''; // Nettoie l'interim au cas où
+        updateTextarea();
+        // Relance automatique tant que l'utilisateur n'a pas appuyé sur Stop
+        if (isRecording) {
+            setTimeout(launchSession, 100);
+        }
+    };
+
+    try {
+        recognition.start();
+    } catch(e) {
+        console.error('Erreur start:', e);
+        stopRec();
+    }
+}
+
+function updateTextarea() {
+    // Affiche : texte commis + texte interim (en cours)
+    const display = recInterim
+        ? recCommitted + (recCommitted ? ' ' : '') + recInterim
+        : recCommitted;
+
+    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
+    if (ta) {
+        ta.value = display.replace(/\s+/g, ' ').trimStart();
+        paragraphs[activeParaIndex] = ta.value;
+        autoResize(ta);
+        ta.scrollTop = ta.scrollHeight;
+    }
+}
+
+function stopRec() {
+    isRecording = false;
+    if (recognition) {
+        recognition.onend = null;
+        recognition.onerror = null;
+        try { recognition.stop(); } catch(e) {}
+        recognition = null;
+    }
+    // Finalise : sauvegarde le texte commis proprement (sans l'interim)
+    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
+    if (ta) {
+        const final = recCommitted.replace(/\s+/g, ' ').trim();
+        ta.value = final;
+        paragraphs[activeParaIndex] = final;
+        autoResize(ta);
+    }
+    document.getElementById('micBtn').classList.remove('recording');
+    document.getElementById('recStatus').classList.remove('active');
+}
+
+// --- Recherche ---
+function toggleSearch() {
+    const ov = document.getElementById('searchOverlay');
+    const btn = document.getElementById('searchBtn');
+    if (ov.classList.contains('show')) {
+        closeSearch();
+    } else {
+        ov.classList.add('show');
+        btn.classList.add('search-active');
+        document.getElementById('searchInput').value = '';
+        document.getElementById('searchResults').style.display = 'none';
+        history.pushState({ screen: 'search' }, '');
+        // Pas de focus auto → le clavier ne s'ouvre pas immédiatement sur mobile
+        // L'utilisateur tape quand il veut
+        setTimeout(() => document.getElementById('searchInput').focus(), 200);
+    }
+}
+
+function closeSearch(e) {
+    if (e && e.target !== document.getElementById('searchOverlay')) return;
+    document.getElementById('searchOverlay').classList.remove('show');
+    document.getElementById('searchBtn').classList.remove('search-active');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchResults').style.display = 'none';
+    renderNotes(); // reset filtrage liste principale
+}
+
+function updateSearchResults() {
+    const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+    const resultsEl = document.getElementById('searchResults');
+
+    if (!q) { resultsEl.style.display = 'none'; return; }
+
+    // Cherche dans actives ET archives
+    const allNotes = [
+        ...(state.notes || []).map(n => ({ ...n, _archived: false })),
+        ...(state.archived || []).map(n => ({ ...n, _archived: true }))
+    ];
+
+    const matches = allNotes.filter(n =>
+        (n.title || '').toLowerCase().includes(q) ||
+        (n.body  || '').toLowerCase().includes(q)
+    ).slice(0, 20); // limiter à 20 résultats
+
+    if (matches.length === 0) {
+        resultsEl.innerHTML = `<div class="search-no-result">Aucune note trouvée</div>`;
+        resultsEl.style.display = 'block';
+        return;
+    }
+
+    resultsEl.innerHTML = matches.map(n => {
+        // Trouver un extrait du corps qui contient la requête
+        let matchSnippet = '';
+        const body = n.body || '';
+        const bodyLower = body.toLowerCase();
+        const pos = bodyLower.indexOf(q);
+        if (pos !== -1 && !n.title.toLowerCase().includes(q)) {
+            const start = Math.max(0, pos - 20);
+            const end = Math.min(body.length, pos + q.length + 40);
+            const raw = (start > 0 ? '…' : '') + body.slice(start, end).replace(/\n/g, ' ') + (end < body.length ? '…' : '');
+            // Mettre en évidence le terme trouvé
+            const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            matchSnippet = raw.replace(re, '<em>$1</em>');
+        }
+        const archiveBadge = n._archived ? ' <em style="opacity:.5;font-style:normal">· archivée</em>' : '';
+        return `<div class="search-result-item" onclick="openFromSearch('${n.id}', ${n._archived})">
+            <div class="search-result-dot" style="background:${n.color || '#888'}"></div>
+            <div style="flex:1;min-width:0">
+                <div class="search-result-title">${escHtml(n.title || 'Sans titre')}${archiveBadge}</div>
+                ${matchSnippet ? `<div class="search-result-match">${matchSnippet}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    resultsEl.style.display = 'block';
+}
+
+function openFromSearch(id, fromArchive) {
+    // Ferme la recherche proprement SANS reset du filtre principal (c'est une nav directe)
+    document.getElementById('searchOverlay').classList.remove('show');
+    document.getElementById('searchBtn').classList.remove('search-active');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchResults').style.display = 'none';
+    openEditor(id, fromArchive);
+}
+// Fermer avec Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (document.getElementById('searchOverlay').classList.contains('show')) closeSearch();
+    }
+});
+
+// --- Dropdowns ---
+function toggleDropdown(id) {
+    const menus = ['sortDropdown', 'actionsDropdown'];
+    menus.forEach(m => {
+        const menu = document.getElementById(m === 'sortDropdown' ? 'sortMenu' : 'actionsMenu');
+        const btn  = document.getElementById(m === 'sortDropdown' ? 'sortBtn' : 'actionsBtn');
+        if (m === id) {
+            menu.classList.toggle('show');
+            btn.classList.toggle('active', menu.classList.contains('show'));
+        } else {
+            menu.classList.remove('show');
+            btn.classList.remove('active');
+        }
+    });
+}
+function closeDropdowns() {
+    ['sortMenu','actionsMenu'].forEach(id => document.getElementById(id)?.classList.remove('show'));
+    ['sortBtn','actionsBtn'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+}
+// Fermer les menus si clic en dehors
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown')) closeDropdowns();
+});
+
+function setSort(mode) {
+    currentSort = mode;
+    closeDropdowns();
+    ['sort-date','sort-title','sort-color'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+    document.getElementById('sort-' + mode)?.classList.add('active');
+    renderNotes();
+}
+
+// --- Export global (JSON) ---
+function exportAllNotes() {
+    const todayCount = (state.today || []).filter(id => state.notes.some(n => n.id === id)).length;
+    const payload = {
+        version:    3,
+        exportedAt: new Date().toISOString(),
+        notes:      state.notes,
+        archived:   state.archived || [],
+        today:      state.today    || []
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'matsNotes_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    showToast(`⬆️ ${state.notes.length} actives · ${(state.archived||[]).length} archives · ${todayCount} aujourd'hui`);
+}
+
+// --- Import (JSON) ---
+function triggerImport() {
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importFileInput').click();
+}
+function importNotes(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            // Détection du format
+            let importedNotes    = [];
+            let importedArchived = [];
+            let importedToday    = [];
+
+            if (data.version >= 3 || (data.notes && data.archived !== undefined && data.today !== undefined)) {
+                // Format v3 complet (notes + archives + aujourd'hui)
+                importedNotes    = Array.isArray(data.notes)    ? data.notes    : [];
+                importedArchived = Array.isArray(data.archived) ? data.archived : [];
+                importedToday    = Array.isArray(data.today)    ? data.today    : [];
+            } else if (data.version === 2 || (data.notes && data.archived !== undefined)) {
+                // Format v2 (notes + archives, pas de today)
+                importedNotes    = Array.isArray(data.notes)    ? data.notes    : [];
+                importedArchived = Array.isArray(data.archived) ? data.archived : [];
+            } else if (Array.isArray(data)) {
+                // Format v1 : tableau brut de notes
+                importedNotes = data;
+            } else if (Array.isArray(data.notes)) {
+                // Format v1 : { notes: [...] }
+                importedNotes = data.notes;
+            } else {
+                return alert('Format de fichier non reconnu.');
+            }
+
+            const totalNotes = importedNotes.length + importedArchived.length;
+            const todayInfo  = importedToday.length > 0 ? ` + ${importedToday.length} réf. Aujourd'hui` : '';
+
+            const choice = confirm(
+                `Importer ${importedNotes.length} note(s) active(s), ${importedArchived.length} archive(s)${todayInfo} ?\n\n` +
+                `OK = Fusionner avec les données existantes\n` +
+                `Annuler = Remplacer toutes les données`
+            );
+
+            snapshotState('Import JSON');
+
+            if (choice) {
+                // Fusion sans doublons (par id)
+                const existIds    = new Set(state.notes.map(n => n.id));
+                const existArcIds = new Set((state.archived || []).map(n => n.id));
+                const existToday  = new Set(state.today || []);
+
+                state.notes    = [...importedNotes.filter(n => !existIds.has(n.id)),    ...state.notes];
+                state.archived = [...importedArchived.filter(n => !existArcIds.has(n.id)), ...(state.archived || [])];
+                // Fusionner aujourd'hui : ajouter les IDs importés qui n'y sont pas encore
+                // (en gardant les IDs locaux en tête, les nouveaux à la suite)
+                const newTodayIds = importedToday.filter(id => !existToday.has(id));
+                state.today = [...(state.today || []), ...newTodayIds];
+            } else {
+                // Remplacement complet
+                state.notes    = importedNotes;
+                state.archived = importedArchived;
+                state.today    = importedToday;
+            }
+
+            // Nettoyer today : retirer les IDs qui ne correspondent plus à aucune note active
+            state.today = (state.today || []).filter(id => state.notes.some(n => n.id === id));
+
+            save(); renderNotes(); renderCollDisplay();
+            showToast(`✅ ${totalNotes} note(s) importée(s)${todayInfo}`);
+        } catch (err) {
+            alert('Erreur de lecture du fichier JSON.\n' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// --- Export & Dialogs ---
+function exportNote(id, fromArchive = false) {
+    const pool = fromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === id);
+    if (!n) return;
+    const text = n.body.replace(/\n\n---PARA_SEP---\n\n/g, '\n\n───────────────────\n\n');
+    const content = n.title + '\n\n' + text;
+    // BOM UTF-8 pour garantir l'affichage correct des accents dans tous les lecteurs
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = n.title.replace(/[^a-z0-9\u00C0-\u024F]/gi, '_') + '.txt';
+    a.click();
+}
+
+function exportCurrentNote() {
+    const title = document.getElementById('editorTitle').value.trim() || 'Note';
+    const body = paragraphs.join('\n\n───────────────────\n\n');
+    const content = title + '\n\n' + body;
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = title.replace(/[^a-z0-9\u00C0-\u024F]/gi, '_') + '.txt';
+    a.click();
+}
+
+function showSaveDialog() {
+    const area = document.getElementById('existingSavesArea');
+    const saves = state.collections || [];
+    area.innerHTML = saves.length ?
+        `<div class="form-label">Écraser une sauvegarde existante</div>
+         <div style="max-height:120px; overflow-y:auto; margin-bottom:16px">
+         ${saves.map(s => {
+             const tCount = (s.today || []).filter(id => (s.notes||[]).some(n => n.id === id)).length;
+             const summary = `${(s.notes||[]).length} actives · ${(s.archived||[]).length} archives · ${tCount} aujourd'hui`;
+             return `<div class="saved-item" onclick="document.getElementById('saveNameInput').value='${escHtml(s.name)}'">
+                 <div><span class="saved-item-name">${escHtml(s.name)}</span>
+                 <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px">${summary}</div></div>
+             </div>`;
+         }).join('')}
+         </div>` : '';
+    document.getElementById('saveNameInput').value = state.currentCollection || '';
+    document.getElementById('saveOverlay').classList.add('show');
+}
+function closeSaveDialog(e) { if(!e || e.target.id==='saveOverlay') document.getElementById('saveOverlay').classList.remove('show'); }
+function saveCollection() {
+    const name = document.getElementById('saveNameInput').value.trim();
+    if (!name) return alert('Nom requis');
+    const data = {
+        name,
+        version:  3,
+        notes:    JSON.parse(JSON.stringify(state.notes)),
+        archived: JSON.parse(JSON.stringify(state.archived || [])),
+        today:    JSON.parse(JSON.stringify(state.today    || [])),
+        savedAt:  Date.now()
+    };
+    const idx = (state.collections || []).findIndex(c => c.name === name);
+    if (idx >= 0) state.collections[idx] = data;
+    else { if (!state.collections) state.collections = []; state.collections.push(data); }
+    state.currentCollection = name;
+    save(); renderCollDisplay(); closeSaveDialog();
+    const todayCount = (data.today).filter(id => data.notes.some(n => n.id === id)).length;
+    showToast(`💾 « ${name} » · ${data.notes.length} actives · ${data.archived.length} archives · ${todayCount} aujourd'hui`);
+}
+
+function showLoadDialog() {
+    const area = document.getElementById('loadListArea');
+    const saves = state.collections || [];
+    area.innerHTML = saves.length ?
+        saves.map(s => {
+            const tCount = (s.today || []).filter(id => (s.notes||[]).some(n => n.id === id)).length;
+            const summary = `${(s.notes||[]).length} actives · ${(s.archived||[]).length} archives · ${tCount} aujourd'hui`;
+            const d = s.savedAt ? new Date(s.savedAt).toLocaleDateString('fr-FR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'}) : '';
+            return `<div class="saved-item" onclick="loadColl('${escHtml(s.name)}')">
+                <div style="flex:1;min-width:0">
+                    <div class="saved-item-name">${escHtml(s.name)}</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px">${summary}${d ? ' · ' + d : ''}</div>
+                </div>
+                <button class="nact-btn danger" onclick="event.stopPropagation(); delColl('${escHtml(s.name)}')">🗑️</button>
+            </div>`;
+        }).join('')
+        : '<div style="text-align:center; padding:20px; color:var(--text-muted)">Aucune sauvegarde.</div>';
+    document.getElementById('loadOverlay').classList.add('show');
+}
+function closeLoadDialog(e) { if(!e || e.target.id==='loadOverlay') document.getElementById('loadOverlay').classList.remove('show'); }
+function loadColl(name) {
+    const c = (state.collections || []).find(x => x.name === name);
+    if (c) {
+        snapshotState('Chargement collection');
+        state.notes    = JSON.parse(JSON.stringify(c.notes    || []));
+        state.archived = JSON.parse(JSON.stringify(c.archived || []));
+        state.today    = JSON.parse(JSON.stringify(c.today    || []));
+        // Nettoyer today : supprimer les IDs orphelins (notes supprimées depuis la sauvegarde)
+        state.today = state.today.filter(id => state.notes.some(n => n.id === id));
+        state.currentCollection = name;
+        save(); renderNotes(); renderCollDisplay();
+        const todayCount = state.today.length;
+        showToast(`📂 « ${name} » · ${state.notes.length} actives · ${state.archived.length} archives · ${todayCount} aujourd'hui`);
+    }
+    closeLoadDialog();
+}
+function delColl(name) {
+    if(!confirm('Supprimer cette collection ?')) return;
+    state.collections = (state.collections || []).filter(c => c.name !== name);
+    if(state.currentCollection === name) state.currentCollection = null;
+    save(); renderCollDisplay(); showLoadDialog();
+}
+
+function renderCollDisplay() {
+    const el = document.getElementById('collectionDisplay');
+    el.innerHTML = state.currentCollection ? 
+        `<span class="current-collection">📋 ${escHtml(state.currentCollection)} <button class="clear-btn" onclick="state.currentCollection=null; save(); renderCollDisplay();">✕</button></span>` : '';
+}
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', () => {
+    initPWA();
+    // load() sera appelé par onAuthChange une fois Firebase initialisé.
+    // On charge quand même le localStorage pour afficher immédiatement quelque chose.
+    loadLocal();
+    renderNotes();
+    renderCollDisplay();
+    renderSwatches();
+    document.getElementById('sort-title')?.classList.add('active');
+    updateUndoBtn();
+    initBackButton();
+
+    // Permettre la soumission du formulaire auth avec Entrée
+    document.getElementById('authPassword')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') submitAuth();
+    });
+    document.getElementById('authEmail')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('authPassword')?.focus();
+    });
+
+    // Vérifier si l'URL contient un lien d'invitation
+    checkInviteLink();
+});
+
+// --- Gestion du bouton retour Android (History API) ---
+function initBackButton() {
+    // Stratégie : on maintient TOUJOURS un état "sentinel" sous l'état courant.
+    // Ainsi, quand l'utilisateur appuie sur retour sur la liste, popstate se déclenche
+    // (au lieu de quitter directement parce que l'historique est vide).
+    // Structure : [sentinel] [list]  ← on est ici
+    history.replaceState({ screen: 'sentinel' }, '');
+    history.pushState({ screen: 'list' }, '');
+
+    window.addEventListener('popstate', (e) => {
+        const scr = (e.state || {}).screen;
+
+        // Si on tombe sur le sentinel → modale quitter
+        if (scr === 'sentinel') {
+            history.pushState({ screen: 'list' }, '');
+            showQuitDialog();
+            return;
+        }
+
+        // Priorité 1 : fermer la recherche
+        if (document.getElementById('searchOverlay').classList.contains('show')) {
+            closeSearch();
+            pushListState();
+            return;
+        }
+
+        // Priorité 2 : fermer le panneau latéral
+        if (document.getElementById('sidePanel').classList.contains('show')) {
+            closeSidePanel();
+            history.pushState({ screen: 'editor' }, '');
+            return;
+        }
+
+        // Priorité 3 : fermer l'éditeur
+        if (document.getElementById('editorOverlay').classList.contains('show')) {
+            closeEditor();
+            pushListState();
+            return;
+        }
+
+        // Priorité 4 : fermer les dialogs ouverts
+        if (document.getElementById('saveOverlay').classList.contains('show')) {
+            closeSaveDialog();
+            pushListState();
+            return;
+        }
+        if (document.getElementById('loadOverlay').classList.contains('show')) {
+            closeLoadDialog();
+            pushListState();
+            return;
+        }
+        if (document.getElementById('gpsOverlay').classList.contains('show')) {
+            closeGpsModal();
+            // Repousser selon contexte (éditeur ouvert ou liste)
+            if (document.getElementById('editorOverlay').classList.contains('show')) {
+                history.pushState({ screen: 'editor' }, '');
+            } else {
+                pushListState();
+            }
+            return;
+        }
+        if (document.getElementById('spaceDetailOverlay')?.classList.contains('show')) {
+            closeSpaceDetail();
+            pushListState();
+            return;
+        }
+        if (document.getElementById('profileOverlay')?.classList.contains('show')) {
+            document.getElementById('profileOverlay').classList.remove('show');
+            pushListState();
+            return;
+        }
+        if (document.getElementById('shareOverlay')?.classList.contains('show')) {
+            document.getElementById('shareOverlay').classList.remove('show');
+            pushListState();
+            return;
+        }
+        if (document.getElementById('quitOverlay').classList.contains('show')) {
+            closeQuitDialog();
+            pushListState();
+            return;
+        }
+
+        // Fallback : on est sur la liste → modale quitter
+        showQuitDialog();
+        pushListState();
+    });
+}
+
+// Maintient toujours sentinel + list dans l'historique quand on est sur la liste
+function pushListState() {
+    history.pushState({ screen: 'sentinel' }, '');
+    history.pushState({ screen: 'list' }, '');
+}
+
+// Appelé quand on ouvre l'éditeur → pousser un état dans l'historique
+function pushEditorState() {
+    history.pushState({ screen: 'editor' }, '');
+}
+
+// --- Dialog quitter ---
+function showQuitDialog() {
+    document.getElementById('quitOverlay').classList.add('show');
+}
+function closeQuitDialog() {
+    document.getElementById('quitOverlay').classList.remove('show');
+}
+function confirmQuit() {
+    // Sur Android PWA, window.close() ou history.go(-999) peuvent fermer l'app
+    // On essaie les deux approches
+    try { window.close(); } catch(e) {}
+    // Fallback : aller très loin en arrière dans l'historique
+    history.go(-100);
+}
+</script>
+<!-- Dialog Quitter -->
+<div class="dialog-overlay" id="quitOverlay" onclick="closeQuitDialog()">
+    <div class="dialog" onclick="event.stopPropagation()" style="text-align:center">
+        <div style="font-size:2rem;margin-bottom:10px">👋</div>
+        <div class="dialog-title">Quitter l'application ?</div>
+        <p style="color:var(--text-muted);font-size:0.9rem;margin:8px 0 20px">Toutes vos notes sont sauvegardées.</p>
+        <div class="dialog-actions" style="justify-content:center">
+            <button class="btn btn-secondary" onclick="closeQuitDialog()">Rester</button>
+            <button class="btn btn-primary" onclick="confirmQuit()">Quitter</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal GPS -->
+<div class="dialog-overlay" id="gpsOverlay" onclick="closeGpsModal(event)">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:460px">
+
+        <!-- Titre de la note -->
+        <div id="gpsNoteTitle" style="font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;display:none"></div>
+
+        <div class="dialog-title" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            Adresse de destination
+        </div>
+
+        <!-- Liste des adresses enregistrées -->
+        <div id="gpsAddressList"></div>
+        <!-- Bouton ajouter adresse -->
+        <button class="phone-add-btn" id="gpsAddAddressBtn" onclick="showGpsSearchField()">+ Ajouter une adresse</button>
+
+        <!-- Champ de recherche (masqué par défaut, affiché lors de l'ajout) -->
+        <div id="gpsSearchArea" style="display:none;margin-top:8px">
+            <label class="form-label">Rechercher une adresse</label>
+            <div class="gps-input-wrap">
+                <input class="form-input" id="gpsAddressInput" type="text"
+                    placeholder="Ex : 10 rue de la Paix, Paris"
+                    autocomplete="off" autocorrect="off" spellcheck="false"
+                    oninput="onGpsInput(this.value)">
+                <div class="gps-suggestions" id="gpsSuggestions" style="display:none"></div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+                <button class="btn btn-secondary" style="flex:1;padding:8px" onclick="hideGpsSearchField()">Annuler</button>
+            </div>
+        </div>
+
+        <!-- Téléphone -->
+        <label class="form-label" style="margin-top:14px">Téléphone</label>
+        <div id="gpsPhoneList"></div>
+        <button class="phone-add-btn" onclick="addPhoneRow()">+ Ajouter un numéro</button>
+
+        <!-- Notes -->
+        <label class="form-label" style="margin-top:14px">Notes</label>
+        <textarea class="form-input" id="gpsNoteInput" rows="2"
+            placeholder="Interphone, étage, horaires…"
+            oninput="saveGpsNote(this.value)"
+            style="resize:none;line-height:1.5"></textarea>
+
+        <div class="dialog-actions" style="margin-top:12px">
+            <button class="btn btn-secondary" onclick="clearGpsAddress()">Effacer tout</button>
+            <button class="btn btn-secondary" onclick="closeGpsModal()">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== ÉCRAN DE CONNEXION ===== -->
+<div class="auth-screen" id="authScreen">
+    <div class="auth-logo">Mat<span>'</span>s Notes</div>
+    <div class="auth-sub">Connectez-vous pour synchroniser vos notes</div>
+    <div class="auth-card">
+        <div class="auth-tabs">
+            <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Connexion</button>
+            <button class="auth-tab" id="tabSignup" onclick="switchAuthTab('signup')">Créer un compte</button>
+        </div>
+        <div class="auth-error" id="authError"></div>
+        <div class="auth-field">
+            <label>Adresse e-mail</label>
+            <input class="auth-input" id="authEmail" type="email" placeholder="vous@exemple.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+            <label>Mot de passe</label>
+            <input class="auth-input" id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="auth-forgot" id="forgotWrap">
+            <button onclick="forgotPassword()">Mot de passe oublié ?</button>
+        </div>
+        <button class="auth-btn" id="authSubmitBtn" onclick="submitAuth()">Se connecter</button>
+        <div class="auth-separator">ou</div>
+        <button class="auth-google-btn" onclick="signInGoogle()">
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-3.59-13.46-8.82l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Continuer avec Google
+        </button>
+    </div>
+</div>
+
+<!-- ===== MODAL PARTAGE ===== -->
+<div class="dialog-overlay" id="shareOverlay" onclick="closeShareModal(event)">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:460px">
+        <div class="dialog-title" style="display:flex;align-items:center;gap:10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            Espaces partagés
+        </div>
+
+        <!-- Liste des espaces existants -->
+        <div id="sharedSpacesList" style="margin-bottom:16px"></div>
+
+        <!-- Rejoindre via code -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">
+            <label class="form-label">Rejoindre un espace</label>
+            <div style="display:flex;gap:8px">
+                <input class="form-input" id="joinCodeInput" placeholder="Ex : K7-M3-X2"
+                    maxlength="8" autocomplete="off" autocorrect="off" autocapitalize="characters"
+                    style="flex:1;letter-spacing:2px;font-weight:600;font-size:1rem"
+                    oninput="this.value=this.value.toUpperCase()"
+                    onkeydown="if(event.key==='Enter')joinByCode()">
+                <button class="btn btn-primary" id="joinCodeBtn" onclick="joinByCode()" style="white-space:nowrap">Rejoindre</button>
+            </div>
+            <div id="joinCodeError" style="font-size:0.78rem;color:var(--danger);margin-top:6px;display:none"></div>
+        </div>
+
+        <!-- Créer un nouvel espace -->
+        <div style="border-top:1px solid var(--border);padding-top:16px">
+            <label class="form-label">Créer un espace partagé</label>
+            <div style="display:flex;gap:8px">
+                <input class="form-input" id="shareSpaceName" placeholder="Nom de l'espace (ex: Famille)" style="flex:1">
+                <button class="btn btn-primary" onclick="createSharedSpace()" style="white-space:nowrap">Créer</button>
+            </div>
+            <div id="shareError" style="font-size:0.78rem;color:var(--danger);margin-top:8px;display:none"></div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" onclick="closeShareModal()">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL ESPACE PARTAGÉ (détail) ===== -->
+<div class="dialog-overlay" id="spaceDetailOverlay" onclick="closeSpaceDetail(event)">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:460px">
+        <div class="dialog-title" id="spaceDetailTitle">Espace partagé</div>
+        <div id="spaceMembersList" style="margin-bottom:8px"></div>
+        <!-- Zone lien d'invitation (remplie par JS) -->
+        <div id="inviteLinkArea"></div>
+        <div id="addMemberError" style="font-size:0.78rem;color:var(--danger);margin-top:8px;display:none"></div>
+        <div class="dialog-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" id="leaveSpaceBtn" onclick="leaveSpace()" style="color:var(--danger);border-color:rgba(224,84,84,0.3)">Quitter</button>
+            <button class="btn btn-secondary" onclick="closeSpaceDetail()">Fermer</button>
+        </div>
+    </div>
+</div>
+<!-- ===== MODAL PROFIL ===== -->
+<div class="dialog-overlay" id="profileOverlay" onclick="closeProfileModal(event)">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:360px">
+        <div class="dialog-title">Mon profil</div>
+
+        <div class="profile-avatar-wrap">
+            <div class="profile-avatar-big" id="profileAvatarBig" onclick="triggerAvatarUpload()">
+                <div class="profile-avatar-overlay">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    Changer
+                </div>
+            </div>
+            <div class="profile-upload-progress" id="profileUploadProgress">
+                <div class="profile-upload-progress-bar" id="profileUploadBar"></div>
+            </div>
+            <div class="profile-email" id="profileEmail"></div>
+        </div>
+
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+
+        <div class="dialog-actions" style="margin-top:8px">
+            <button class="btn btn-secondary" onclick="closeProfileModal()">Fermer</button>
+            <button class="btn btn-secondary" onclick="closeProfileModal();signOutUser()" style="color:var(--danger)">🚪 Déconnexion</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
