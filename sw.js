@@ -1,6 +1,5 @@
-// Mat's Notes — Service Worker
-// ⚠️ Incrémenter CACHE_VERSION à chaque déploiement pour forcer la mise à jour
-const CACHE_VERSION = 'v6';
+// Mat's Notes — Service Worker v4
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `mats-notes-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -13,16 +12,34 @@ const ASSETS = [
     './web-app-manifest-512x512.png'
 ];
 
-// Installation
+// Libs Firebase à mettre en cache (critiques pour le mode offline)
+const FIREBASE_LIBS = [
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
+];
+
+// Installation : cacher les assets locaux + libs Firebase
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(ASSETS).catch(() => {}))
-            .then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then(cache => {
+            // Assets locaux (obligatoires)
+            return cache.addAll(ASSETS)
+                .then(() => {
+                    // Libs Firebase (best-effort, pas bloquant)
+                    return Promise.allSettled(
+                        FIREBASE_LIBS.map(url =>
+                            fetch(url).then(res => {
+                                if (res.ok) cache.put(url, res);
+                            }).catch(() => {})
+                        )
+                    );
+                });
+        }).then(() => self.skipWaiting())
     );
 });
 
-// Activation : supprime TOUS les anciens caches
+// Activation : supprime les anciens caches
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys()
@@ -33,25 +50,45 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch
+// Fetch : stratégie par type de ressource
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // Polices Google
-    if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    // Libs Firebase (gstatic.com) : cache-first
+    if (url.hostname === 'www.gstatic.com') {
         event.respondWith(
-            fetch(event.request)
-                .then(res => {
-                    const clone = res.clone();
-                    caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+            caches.match(event.request).then(cached => {
+                if (cached) return cached;
+                return fetch(event.request).then(res => {
+                    if (res && res.ok) {
+                        const clone = res.clone();
+                        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+                    }
                     return res;
-                })
-                .catch(() => caches.match(event.request))
+                });
+            })
         );
         return;
     }
 
-    // index.html : network-first (toujours la version la plus fraiche)
+    // Polices Google : stale-while-revalidate
+    if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+        event.respondWith(
+            caches.match(event.request).then(cached => {
+                const fetchPromise = fetch(event.request).then(res => {
+                    if (res && res.ok) {
+                        const clone = res.clone();
+                        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+                    }
+                    return res;
+                }).catch(() => cached);
+                return cached || fetchPromise;
+            })
+        );
+        return;
+    }
+
+    // index.html : network-first avec fallback cache
     if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
         event.respondWith(
             fetch(event.request)

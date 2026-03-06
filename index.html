@@ -22,8 +22,8 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, fetchSignInMethodsForEmail, linkWithPopup, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyA0WhqOv1UpODz8gWltUGCj4a2QWI-M7gQ",
@@ -36,10 +36,14 @@ const firebaseConfig = {
 
 const fbApp  = initializeApp(firebaseConfig);
 const fbAuth = getAuth(fbApp);
-const fbDb   = getFirestore(fbApp);
+// Persistance Firestore IndexedDB pour le mode offline
+const fbDb = initializeFirestore(fbApp, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
 
 // Expose sur window pour les fonctions globales
-window._fb = { fbAuth, fbDb, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp };
+window._fb = { fbAuth, fbDb, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, fetchSignInMethodsForEmail, linkWithPopup, updateProfile, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, writeBatch, getDocs, query, where, serverTimestamp };
 
 // Surveiller l'état de connexion
 onAuthStateChanged(fbAuth, user => {
@@ -267,22 +271,20 @@ onAuthStateChanged(fbAuth, user => {
     }
     
     .color-popup {
-        position: absolute; bottom: 60px; left: 0; 
-        background: white; padding: 12px; border-radius: 16px;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
-        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 152px; z-index: 20;
+        position: absolute; bottom: 60px; left: 0;
+        background: #1a1a1a; padding: 10px; border-radius: 16px;
+        box-shadow: 0 5px 24px rgba(0,0,0,0.5);
+        display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; width: 272px; z-index: 20;
         opacity: 0; visibility: hidden; transform: translateY(10px);
         transition: all 0.2s;
     }
     .color-popup.show { opacity: 1; visibility: visible; transform: translateY(0); }
     
-    .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s; }
+    .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s; box-shadow: inset 0 1px 2px rgba(255,255,255,0.15); }
     .swatch.active { border-color: rgba(0,0,0,0.4); transform: scale(1.15); }
 
     /* Mic Button State */
-    .tool-btn.mic.recording { background: #ef4444; color: white; animation: pulse-mic 1.2s infinite; }
     .tool-btn:disabled { opacity: 0.3 !important; pointer-events: none; }
-    @keyframes pulse-mic { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
 
     /* --- Side Panel --- */
     .side-panel-overlay { position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.3); opacity: 0; visibility: hidden; transition: all 0.3s; }
@@ -301,6 +303,27 @@ onAuthStateChanged(fbAuth, user => {
     .side-panel-close { background: none; border: none; font-size: 1.5rem; color: rgba(0,0,0,0.4); cursor: pointer; }
 
     .side-panel-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .side-panel-tabs { display:flex; gap:4px; padding:10px 12px 0; background:#f5f2ed; border-bottom:1px solid rgba(0,0,0,0.08); }
+    .sp-tab { flex:1; padding:8px 6px; border:none; background:none; color:rgba(0,0,0,0.45); font-family:inherit; font-size:0.8rem; font-weight:600; border-bottom:2px solid transparent; cursor:pointer; transition:all 0.15s; }
+    .sp-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .sp-archive-card { background:white; border:1px solid rgba(212,168,83,0.3); border-radius:10px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:all 0.15s; }
+    .sp-archive-card:hover { border-color:var(--accent); }
+    .sp-archive-title { font-size:0.78rem; font-weight:700; color:var(--accent); margin-bottom:4px; }
+    .sp-archive-date { font-size:0.68rem; color:rgba(0,0,0,0.4); margin-bottom:6px; }
+    .sp-archive-preview { font-size:0.82rem; color:rgba(0,0,0,0.6); line-height:1.4; }
+    .export-space-row { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; transition:border-color 0.15s; }
+    .export-space-row:hover { border-color:var(--accent); }
+    .export-space-row input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); flex-shrink:0; cursor:pointer; }
+    .export-space-icon { font-size:1.1rem; flex-shrink:0; }
+    .export-space-info { flex:1; min-width:0; }
+    .export-space-name { font-weight:600; font-size:0.9rem; color:var(--text); }
+    .export-space-count { font-size:0.72rem; color:var(--text-muted); margin-top:1px; }
+    .sp-archive-view-overlay { position:fixed; inset:0; z-index:650; background:rgba(0,0,0,0.7); display:flex; align-items:flex-start; justify-content:center; padding:60px 12px 20px; opacity:0; visibility:hidden; transition:all 0.2s; overflow-y:auto; }
+    .sp-archive-view-overlay.show { opacity:1; visibility:visible; }
+    .sp-archive-view-inner { background:#faf8f5; border-radius:18px; width:100%; max-width:520px; padding:24px; }
+    .sp-archive-view-title { font-family:"Playfair Display",serif; font-size:1.1rem; font-weight:700; color:rgba(0,0,0,0.8); margin-bottom:4px; }
+    .sp-archive-view-meta { font-size:0.75rem; color:rgba(0,0,0,0.4); margin-bottom:18px; }
+    .sp-archive-para { border-left:3px solid var(--accent); padding-left:14px; margin-bottom:18px; white-space:pre-wrap; font-size:0.92rem; line-height:1.6; color:rgba(0,0,0,0.8); }
     .para-item-card {
         background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
         padding: 14px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
@@ -676,18 +699,20 @@ onAuthStateChanged(fbAuth, user => {
     .join-accept { background: #2ecc71; color: #0f0f0f; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 700; font-family: inherit; cursor: pointer; font-size: 0.88rem; }
     .join-decline { background: none; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); border-radius: 8px; padding: 8px 12px; font-family: inherit; cursor: pointer; font-size: 0.88rem; }
 
-    .rec-status {
-        position: fixed; top: 0; left: 0; right: 0; height: 4px; background: #ef4444; z-index: 1000;
-        transform: scaleX(0); transform-origin: left;
-    }
-    .rec-status.active { animation: rec-progress 2s infinite linear; }
-    @keyframes rec-progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
 
+    /* ===== Send to Space modal ===== */
+    .sts-space-row { display:flex; align-items:center; gap:10px; padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; transition:all 0.15s; }
+    .sts-space-row:hover { border-color:var(--accent); background:rgba(212,168,83,0.06); }
+    .sts-space-row.space-current { opacity:0.45; cursor:default; pointer-events:none; border-style:dashed; }
+    .sts-space-name { font-weight:600; font-size:0.9rem; color:var(--text); }
+    .sts-space-sub  { font-size:0.72rem; color:var(--text-muted); margin-top:2px; }
+    .sts-conflict-box { background:rgba(212,168,83,0.07); border:1px solid rgba(212,168,83,0.35); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+    .sts-conflict-box h4 { font-size:0.85rem; font-weight:700; color:var(--accent); margin:0 0 6px; }
+    .sts-conflict-box p  { font-size:0.78rem; color:var(--text-muted); margin:0 0 10px; line-height:1.5; }
+    .sts-conflict-box .sts-btns { display:flex; gap:8px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
-
-<div class="rec-status" id="recStatus"></div>
 
 <header>
     <div class="header-brand">
@@ -763,6 +788,10 @@ onAuthStateChanged(fbAuth, user => {
                     <span class="dmenu-icon">⬇️</span> Importer (.json)
                 </div>
                 <div class="dmenu-separator"></div>
+                <div class="dmenu-item" onclick="closeDropdowns(); openProAddressModal()">
+                    <span class="dmenu-icon">🏠</span> Adresse Pro
+                </div>
+                <div class="dmenu-separator"></div>
                 <div class="dmenu-item" onclick="closeDropdowns(); openShareModal()">
                     <span class="dmenu-icon">🔗</span> Espaces partagés
                 </div>
@@ -781,6 +810,11 @@ onAuthStateChanged(fbAuth, user => {
             <div class="sync-dot" id="syncDot"></div>
             <div class="user-avatar" id="userAvatar" onclick="openProfileModal()" title="Mon profil">?</div>
         </div>
+
+        <!-- Bouton connexion (visible en mode offline) -->
+        <button class="hbtn-icon" id="loginBtn" onclick="showLoginScreen()" title="Se connecter" style="display:none;font-size:0.75rem;font-weight:700;width:auto;padding:0 10px;color:var(--accent);border-color:var(--accent)">
+            Connexion
+        </button>
     </div>
 </header>
 
@@ -831,7 +865,7 @@ onAuthStateChanged(fbAuth, user => {
     <div class="editor-header">
         <button class="editor-back" onclick="closeEditor()">←</button>
         <div class="editor-title-wrap">
-            <input class="editor-title-input" id="editorTitle" type="text" placeholder="Titre..." maxlength="80" oninput="scheduleEditorSnapshot(); autoSave()">
+            <input class="editor-title-input" id="editorTitle" type="text" placeholder="Titre..." maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="on" oninput="scheduleEditorSnapshot(); autoSave()">
         </div>
         <div class="editor-actions">
             <div class="autosave-indicator" id="autosaveIndicator" title="Sauvegarde automatique"></div>
@@ -878,11 +912,9 @@ onAuthStateChanged(fbAuth, user => {
                     <path d="M3 7v6h6"/><path d="M3 13C5 7.5 10.5 4 17 5.5a9 9 0 0 1 4 14.5"/>
                 </svg>
             </button>
-            <button class="tool-btn mic" id="micBtn" onclick="toggleMic()" title="Dicter">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
+            <button class="tool-btn" id="sendToSpaceBtn" onclick="openSendToSpaceModal()" title="Envoyer vers un espace">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                 </svg>
             </button>
         </div>
@@ -900,7 +932,31 @@ onAuthStateChanged(fbAuth, user => {
         <span class="side-panel-title">Séances</span>
         <button class="side-panel-close" onclick="closeSidePanel()">✕</button>
     </div>
+    <div class="side-panel-tabs">
+        <button class="sp-tab active" id="spTabActive" onclick="switchSpTab('active')">📝 En cours</button>
+        <button class="sp-tab" id="spTabArchived" onclick="switchSpTab('archived')">📦 Archivées</button>
+    </div>
+    <div style="padding:10px 12px 6px;border-bottom:1px solid rgba(0,0,0,0.06)">
+        <button onclick="archiveAllSessions()" style="width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:10px;padding:9px 14px;color:#0f0f0f;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            Archiver toutes les séances
+        </button>
+    </div>
     <div class="side-panel-list" id="paraList"></div>
+</div>
+
+<!-- Overlay visualisation archive de séances -->
+<div class="sp-archive-view-overlay" id="spArchiveViewOverlay" onclick="if(event.target===this)closeSpArchiveView()">
+    <div class="sp-archive-view-inner" onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+            <div>
+                <div class="sp-archive-view-title" id="spArchiveViewTitle"></div>
+                <div class="sp-archive-view-meta" id="spArchiveViewMeta"></div>
+            </div>
+            <button onclick="closeSpArchiveView()" style="background:none;border:none;font-size:1.4rem;color:rgba(0,0,0,0.4);cursor:pointer;flex-shrink:0;margin-left:10px">✕</button>
+        </div>
+        <div id="spArchiveViewContent"></div>
+    </div>
 </div>
 
 <!-- Dialogs -->
@@ -1010,26 +1066,23 @@ function _refreshProfileModal() {
 // --- State & Config ---
 const STORAGE_KEY = 'matsNotes';
 const NOTE_COLORS = [
-    // Ligne 1 — couleurs vives originales
-    '#e74c3c','#e67e22','#f1c40f','#2ecc71',
-    // Ligne 2
-    '#1abc9c','#3498db','#9b59b6','#e91e63',
-    // Ligne 3
-    '#00bcd4','#ff5722',
-    // Ligne 3 suite — nouvelles couleurs
-    '#ff8a65','#a5d6a7',
-    // Ligne 4 — nouvelles
-    '#81d4fa','#ce93d8','#f48fb1','#80cbc4',
-    // Ligne 5 — nouvelles
-    '#bcaaa4','#b0bec5','#ffe082','#c5e1a5'
+    // Ligne 1 — Rouges & Oranges
+    '#e53935','#d81b60','#e65100','#ff6d00','#f57f17','#e74c3c','#c62828','#bf360c',
+    // Ligne 2 — Jaunes & Verts vifs
+    '#f9a825','#ffd600','#aeea00','#00c853','#2ecc71','#1b5e20','#33691e','#558b2f',
+    // Ligne 3 — Cyans & Bleus
+    '#00bcd4','#00acc1','#0097a7','#006064','#1565c0','#1976d2','#2196f3','#0288d1',
+    // Ligne 4 — Violets & Roses
+    '#7b1fa2','#8e24aa','#9c27b0','#6a1b9a','#e91e63','#c2185b','#ad1457','#880e4f',
+    // Ligne 5 — Contrastes & Neutres forts
+    '#ff1744','#ff6f00','#76ff03','#00e5ff','#2979ff','#d500f9','#ff4081','#212121',
 ];
 
 let state = { notes: [], archived: [], today: [], collections: [], currentCollection: null };
 let editingNoteId = null;
+let editingFromArchive = false; // true si la note ouverte vient des archives
 let currentColor = NOTE_COLORS[0];
 let paragraphs = [''];
-let recognition = null;
-let isRecording = false;
 let activeParaIndex = 0;
 let currentSort = 'title'; // 'date' | 'title' | 'color'
 let currentView = 'active'; // 'active' | 'archive' | 'today'
@@ -1085,13 +1138,11 @@ function showToast(msg) {
 }
 
 // Variables pour la transcription vocale
-let recCommitted = '';  // Texte définitivement validé (accumulé session après session)
-let recInterim = '';    // Texte en cours de reconnaissance (affiché en temps réel, non sauvé)
 
 // --- PWA ---
 let deferredInstallPrompt = null;
 
-// Capture l'événement d'installation avant qu'il ne disparaisse
+// Capture l"événement d'installation avant qu"il ne disparaisse
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
@@ -1132,28 +1183,75 @@ function initPWA() {
 
 // --- Firebase State ---
 let currentUser   = null;
-let currentSpaceId = null; // null = notes perso, sinon ID de l'espace partagé actif
+let currentSpaceId = null; // null = notes perso, "local_xxx" = espace local, "space_xxx" = partagé Firebase
+const LOCAL_SPACES_KEY     = 'matsNotes_localSpaces';   // index des espaces locaux
+const PERSONAL_NAME_KEY    = 'matsNotes_personalName'; // nom de l'espace personnel principal
+
+function _getPersonalName() {
+    return localStorage.getItem(PERSONAL_NAME_KEY) || 'Mes notes personnelles';
+}
+function _setPersonalName(name) {
+    localStorage.setItem(PERSONAL_NAME_KEY, name);
+}
+
+function _getLocalSpaces() {
+    try { return JSON.parse(localStorage.getItem(LOCAL_SPACES_KEY)) || []; } catch { return []; }
+}
+function _saveLocalSpaces(spaces) {
+    localStorage.setItem(LOCAL_SPACES_KEY, JSON.stringify(spaces));
+}
+function _isLocalSpace(spaceId) {
+    return spaceId && spaceId.startsWith('local_');
+}
 let unsubscribeSnapshot = null; // pour détacher le listener Firestore
 
 // Callback appelé par le module Firebase quand l'auth change
+// Flag : true = déconnexion volontaire, false = offline/init
+let _intentionalSignOut = false;
+
 window.onAuthChange = function(user) {
     currentUser = user;
     if (user) {
+        _intentionalSignOut = false;
+        clearTimeout(window._fbTimeoutHandle);
         document.getElementById('authScreen').style.display = 'none';
+        document.getElementById('loginBtn').style.display = 'none';
         updateUserBadge(user);
         document.getElementById('userBadge').style.display = 'flex';
         subscribeToNotes();
-        // Vérifier si une invitation était en attente de connexion
+        // Uploader tous les espaces locaux vers Firebase au démarrage
+        // (garantit la sync même si des notes ont été ajoutées hors connexion)
+        setTimeout(() => _forceSyncAllLocalSpaces(), 3000);
         if (window._pendingInvite) {
             const { token, spaceId } = window._pendingInvite;
             window._pendingInvite = null;
             setTimeout(() => joinSpaceFromInvite(token, spaceId), 1000);
         }
     } else {
-        document.getElementById('authScreen').style.display = 'flex';
-        document.getElementById('userBadge').style.display = 'none';
         if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
-        loadLocal();
+        if (_intentionalSignOut) {
+            // Déconnexion volontaire → écran de connexion
+            document.getElementById('authScreen').style.display = 'flex';
+            document.getElementById('userBadge').style.display = 'none';
+            state = { notes: [], archived: [], today: [], collections: [], currentCollection: null };
+            renderNotes();
+        } else {
+            // Firebase indisponible (offline) → charger le cache local
+            const localData = localStorage.getItem(STORAGE_KEY);
+            if (localData) {
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('userBadge').style.display = 'none';
+                document.getElementById('loginBtn').style.display = 'flex';
+                loadLocal();
+                renderNotes();
+                renderCollDisplay();
+                setSyncDot('offline');
+            } else {
+                // Vraiment aucune donnée → écran de connexion
+                document.getElementById('authScreen').style.display = 'flex';
+                document.getElementById('userBadge').style.display = 'none';
+            }
+        }
     }
 };
 
@@ -1190,8 +1288,9 @@ function setSyncDot(state) { // 'ok' | 'syncing' | 'offline'
 
 // --- Core: load/save ---
 function _storageKey() {
-    // Clé localStorage différente selon l'espace actif → isolation totale
-    return currentSpaceId ? `${STORAGE_KEY}_space_${currentSpaceId}` : STORAGE_KEY;
+    if (!currentSpaceId) return STORAGE_KEY;
+    if (_isLocalSpace(currentSpaceId)) return `${STORAGE_KEY}_${currentSpaceId}`;
+    return `${STORAGE_KEY}_space_${currentSpaceId}`;
 }
 
 function loadLocal() {
@@ -1205,56 +1304,173 @@ function load() { loadLocal(); } // compatibilité
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function save() {
-    // 1. Sauvegarder en local dans la clé propre à l'espace courant
     localStorage.setItem(_storageKey(), JSON.stringify(state));
-    // 2. Si connecté, pousser vers Firestore au bon endroit
-    if (currentUser) syncToFirestore();
-}
-
-async function syncToFirestore() {
-    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
-    if (!fbDb || !currentUser) return;
-    setSyncDot('syncing');
-    try {
-        // Écrire dans l'espace partagé OU dans les notes perso selon contexte
-        const ref = currentSpaceId
-            ? doc(fbDb, 'shared', currentSpaceId, 'data', 'main')
-            : doc(fbDb, 'users', currentUser.uid, 'data', 'main');
-        await setDoc(ref, {
-            notes:             state.notes,
-            archived:          state.archived     || [],
-            today:             state.today        || [],
-            collections:       state.collections  || [],
-            currentCollection: state.currentCollection || null,
-            updatedAt:         serverTimestamp()
-        });
-        setSyncDot('ok');
-    } catch(e) {
-        console.error('Sync Firestore échouée :', e);
+    if (currentUser && window._fb) {
+        syncToFirestore();
+    } else {
         setSyncDot('offline');
     }
 }
 
+async function syncToFirestore() {
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    if (!fbDb || !currentUser) { setSyncDot('offline'); return; }
+    setSyncDot('syncing');
+    try {
+        if (currentSpaceId && !_isLocalSpace(currentSpaceId)) {
+            // Espace partagé Firebase
+            const ref = doc(fbDb, 'shared', currentSpaceId, 'data', 'main');
+            await setDoc(ref, {
+                notes: state.notes, archived: state.archived || [],
+                today: state.today || [], collections: state.collections || [],
+                currentCollection: state.currentCollection || null, updatedAt: serverTimestamp()
+            });
+        } else if (_isLocalSpace(currentSpaceId)) {
+            // Espace local → users/{uid}/localSpaces/{spaceId}
+            const ref = doc(fbDb, 'users', currentUser.uid, 'localSpaces', currentSpaceId);
+            await setDoc(ref, {
+                spaceId:           currentSpaceId,
+                notes:             state.notes,
+                archived:          state.archived          || [],
+                today:             state.today             || [],
+                collections:       state.collections       || [],
+                currentCollection: state.currentCollection || null,
+                updatedAt:         serverTimestamp()
+            });
+            // Mettre à jour l'index (sans await pour ne pas bloquer le dot)
+            _syncLocalSpacesIndex().catch(e => console.warn('Index sync:', e.message));
+        } else {
+            // Notes personnelles
+            const ref = doc(fbDb, 'users', currentUser.uid, 'data', 'main');
+            const localSpaces = _getLocalSpaces();
+            await setDoc(ref, {
+                notes:             state.notes,
+                archived:          state.archived          || [],
+                today:             state.today             || [],
+                collections:       state.collections       || [],
+                currentCollection: state.currentCollection || null,
+                personalSpaceName: _getPersonalName(),
+                localSpacesIndex:  localSpaces.map(sp => ({ id: sp.id, name: sp.name, createdAt: sp.createdAt })),
+                updatedAt:         serverTimestamp()
+            });
+        }
+        setSyncDot('ok');
+    } catch(e) {
+        console.error('[Sync] Firestore error:', e.code, e.message);
+        setSyncDot('offline');
+        // Erreur de permissions → afficher un guide pour l'utilisateur
+        if (e.code === 'permission-denied' || e.code === 'PERMISSION_DENIED') {
+            _showFirestoreRulesWarning();
+        }
+    }
+}
+
+function _showFirestoreRulesWarning() {
+    if (window._rulesWarningShown) return;
+    window._rulesWarningShown = true;
+    showToast('⚠️ Règles Firestore : espaces locaux non autorisés — voir Espaces partagés');
+    const banner = document.getElementById('firestoreRulesInfo');
+    if (banner) banner.style.display = 'block';
+    console.warn(
+        '%c[MatsNotes] Règles Firestore manquantes pour les espaces locaux.\n' +
+        'Dans Firebase Console > Firestore > Règles, ajoutez :\n\n' +
+        'match /users/{uid}/localSpaces/{spaceId} {\n' +
+        '  allow read, write: if request.auth != null && request.auth.uid == uid;\n' +
+        '}',
+        'color: orange; font-size: 13px;'
+    );
+}
+
+async function _syncLocalSpacesIndex() {
+    // Stocke la liste des espaces locaux (nom+id) dans le doc principal de l'utilisateur
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    if (!fbDb || !currentUser) return;
+    const localSpaces = _getLocalSpaces();
+    const ref = doc(fbDb, 'users', currentUser.uid, 'data', 'main');
+    await setDoc(ref, {
+        localSpacesIndex: localSpaces.map(sp => ({ id: sp.id, name: sp.name, createdAt: sp.createdAt })),
+        personalSpaceName: _getPersonalName()
+    }, { merge: true }); // merge pour ne pas écraser les notes
+}
+
+// Déclencher la sync de l'index quand on crée/renomme/supprime un espace local
+async function _onLocalSpaceChanged() {
+    save(); // sauvegarde localStorage
+    if (currentUser && window._fb) await _syncLocalSpacesIndex();
+    loadSharedSpaces();
+}
+
+// Upload COMPLET de tous les espaces locaux vers Firebase
+// Appelé à la connexion pour garantir que tout est à jour
+async function _forceSyncAllLocalSpaces() {
+    if (!currentUser || !window._fb) return;
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    const localSpaces = _getLocalSpaces();
+    if (!localSpaces.length) return;
+
+    console.log('[Sync] Upload de', localSpaces.length, 'espace(s) local/aux vers Firebase...');
+    let synced = 0;
+    for (const sp of localSpaces) {
+        try {
+            const cacheKey  = STORAGE_KEY + '_' + sp.id;
+            const rawData   = localStorage.getItem(cacheKey);
+            if (!rawData) continue; // espace vide côté local, rien à uploader
+            const data      = JSON.parse(rawData);
+            // Ne rien uploader si pas de notes ET pas d'archives (espace vide)
+            if (!(data.notes?.length) && !(data.archived?.length)) continue;
+            const ref = doc(fbDb, 'users', currentUser.uid, 'localSpaces', sp.id);
+            await setDoc(ref, {
+                notes:             data.notes             || [],
+                archived:          data.archived          || [],
+                today:             data.today             || [],
+                collections:       data.collections       || [],
+                currentCollection: data.currentCollection || null,
+                updatedAt:         serverTimestamp()
+            });
+            synced++;
+            console.log('[Sync] Espace « ' + sp.name + ' » uploadé (' + (data.notes?.length || 0) + ' notes)');
+        } catch(e) {
+            console.warn('[Sync] Erreur upload espace ' + sp.id + ':', e.message);
+        }
+    }
+    // Mettre à jour l'index dans le doc principal
+    if (synced > 0) await _syncLocalSpacesIndex();
+    console.log('[Sync] Upload terminé :', synced, '/', localSpaces.length, 'espaces');
+}
+
+// Listeners actifs pour les espaces locaux (pour les détacher si besoin)
+let _localSpaceListeners = {};
+
 function subscribeToNotes(spaceId = null) {
+    currentSpaceId = spaceId;
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+
+    // Espace local → écouter sur Firebase si connecté, sinon localStorage seul
+    if (_isLocalSpace(spaceId)) {
+        loadLocal();
+        renderNotes();
+        renderCollDisplay();
+        if (currentUser && window._fb) {
+            _subscribeLocalSpace(spaceId);
+        } else {
+            setSyncDot('ok');
+        }
+        return;
+    }
+
     const { fbDb, doc, onSnapshot } = window._fb;
     if (!fbDb || !currentUser) return;
-    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
 
     const ref = spaceId
         ? doc(fbDb, 'shared', spaceId, 'data', 'main')
         : doc(fbDb, 'users', currentUser.uid, 'data', 'main');
 
-    // Vider l'état avant de charger le nouvel espace (évite que les notes d'un espace
-    // restent affichées pendant le chargement de l'autre)
-    state.notes      = [];
-    state.archived   = [];
-    state.today      = [];
-    state.collections = [];
-    state.currentCollection = null;
+    // Cache local immédiat
+    loadLocal();
     renderNotes();
     renderCollDisplay();
-
     setSyncDot('syncing');
+
     unsubscribeSnapshot = onSnapshot(ref, (snap) => {
         if (snap.exists()) {
             const d = snap.data();
@@ -1263,12 +1479,27 @@ function subscribeToNotes(spaceId = null) {
             state.today             = d.today             || [];
             state.collections       = d.collections       || [];
             state.currentCollection = d.currentCollection || null;
+
+            // Restaurer le nom perso depuis Firebase (si on est sur les notes principales)
+            if (!spaceId && d.personalSpaceName) {
+                _setPersonalName(d.personalSpaceName);
+            }
+
+            // Restaurer les espaces locaux depuis l'index Firebase
+            if (!spaceId && Array.isArray(d.localSpacesIndex)) {
+                // Appel async avec await dans un contexte onSnapshot (qui n'est pas async)
+                // → on lance la promise et on rafraîchit l'UI quand elle se termine
+                _restoreLocalSpacesFromFirebase(d.localSpacesIndex).then(() => {
+                    // Rafraîchir la modale espaces si elle est ouverte
+                    if (document.getElementById('shareOverlay')?.classList.contains('show')) {
+                        loadSharedSpaces();
+                    }
+                });
+            }
         } else {
-            // Document inexistant (espace vide ou nouveau) → état vide
             state.notes = []; state.archived = []; state.today = [];
             state.collections = []; state.currentCollection = null;
         }
-        // Cache local isolé par espace
         localStorage.setItem(_storageKey(), JSON.stringify(state));
         renderNotes();
         renderCollDisplay();
@@ -1277,6 +1508,80 @@ function subscribeToNotes(spaceId = null) {
         console.error('onSnapshot erreur :', err);
         setSyncDot('offline');
     });
+}
+
+function _subscribeLocalSpace(spaceId) {
+    // Abonnement Firebase pour un espace local spécifique
+    const { fbDb, doc, onSnapshot } = window._fb;
+    if (!fbDb || !currentUser) return;
+    const ref = doc(fbDb, 'users', currentUser.uid, 'localSpaces', spaceId);
+    setSyncDot('syncing');
+    const unsub = onSnapshot(ref, (snap) => {
+        if (snap.exists() && currentSpaceId === spaceId) {
+            const d = snap.data();
+            state.notes             = d.notes             || [];
+            state.archived          = d.archived          || [];
+            state.today             = d.today             || [];
+            state.collections       = d.collections       || [];
+            state.currentCollection = d.currentCollection || null;
+            localStorage.setItem(_storageKey(), JSON.stringify(state));
+            renderNotes();
+            renderCollDisplay();
+        }
+        setSyncDot('ok');
+    }, () => setSyncDot('offline'));
+    _localSpaceListeners[spaceId] = unsub;
+    unsubscribeSnapshot = () => { if (_localSpaceListeners[spaceId]) { _localSpaceListeners[spaceId](); delete _localSpaceListeners[spaceId]; } };
+}
+
+async function _restoreLocalSpacesFromFirebase(indexFromFirebase) {
+    // Synchroniser l'index et les données de chaque espace local depuis Firebase
+    const { fbDb, doc, getDoc } = window._fb;
+    if (!fbDb || !currentUser) return;
+
+    const existing = _getLocalSpaces();
+    let indexChanged = false;
+
+    // 1. Mettre à jour l'index local (ajouter les espaces manquants, mettre à jour les noms)
+    for (const sp of indexFromFirebase) {
+        const found = existing.find(e => e.id === sp.id);
+        if (!found) {
+            existing.push({ id: sp.id, name: sp.name, createdAt: sp.createdAt });
+            indexChanged = true;
+        } else if (found.name !== sp.name) {
+            found.name = sp.name; // nom mis à jour sur l'autre appareil
+            indexChanged = true;
+        }
+    }
+    if (indexChanged) _saveLocalSpaces(existing);
+
+    // 2. Télécharger les données de chaque espace depuis Firebase
+    //    (toujours, pour s'assurer d'avoir la version la plus récente)
+    for (const sp of indexFromFirebase) {
+        try {
+            const ref  = doc(fbDb, 'users', currentUser.uid, 'localSpaces', sp.id);
+            const snap = await getDoc(ref);
+            if (snap.exists()) {
+                const cacheKey = STORAGE_KEY + '_' + sp.id;
+                const fresh = JSON.stringify(snap.data());
+                // N'écrire que si les données ont changé (évite les écritures inutiles)
+                if (localStorage.getItem(cacheKey) !== fresh) {
+                    localStorage.setItem(cacheKey, fresh);
+                    // Si c'est l'espace actif, mettre à jour l'état en mémoire
+                    if (currentSpaceId === sp.id) {
+                        const d = snap.data();
+                        state.notes             = d.notes             || [];
+                        state.archived          = d.archived          || [];
+                        state.today             = d.today             || [];
+                        state.collections       = d.collections       || [];
+                        state.currentCollection = d.currentCollection || null;
+                        renderNotes();
+                        renderCollDisplay();
+                    }
+                }
+            }
+        } catch(e) { console.warn('Restore local space', sp.id, e.message); }
+    }
 }
 
 // --- Auth functions ---
@@ -1326,13 +1631,84 @@ async function submitAuth() {
 }
 
 async function signInGoogle() {
-    const { fbAuth, GoogleAuthProvider, signInWithPopup } = window._fb;
+    const { fbAuth, GoogleAuthProvider, signInWithPopup, fetchSignInMethodsForEmail, linkWithPopup,
+            signInWithEmailAndPassword } = window._fb;
     try {
         const provider = new GoogleAuthProvider();
+        // Forcer le sélecteur de compte Google à chaque fois
+        provider.setCustomParameters({ prompt: 'select_account' });
         await signInWithPopup(fbAuth, provider);
+        // Succès direct → onAuthChange prend le relais
     } catch(e) {
-        if (e.code !== 'auth/popup-closed-by-user') showAuthError('Erreur Google : ' + e.message);
+        if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+
+        // Cas : compte email déjà existant avec la même adresse → proposer la liaison
+        if (e.code === 'auth/account-exists-with-different-credential') {
+            const email = e.customData?.email || '';
+            if (!email) { showAuthError('Erreur Google : ' + e.message); return; }
+            try {
+                const methods = await fetchSignInMethodsForEmail(fbAuth, email);
+                if (methods.includes('password')) {
+                    // Demander le mot de passe pour lier les deux comptes
+                    _showLinkAccountPrompt(email, e.credential || null);
+                } else {
+                    showAuthError('Un compte existe déjà avec ' + email + ". Connectez-vous par e-mail d'abord.");
+                }
+            } catch(e2) {
+                showAuthError('Erreur : ' + e2.message);
+            }
+            return;
+        }
+        showAuthError('Erreur Google : ' + e.message);
     }
+}
+
+function _showLinkAccountPrompt(email, pendingCredential) {
+    // Affiche un message expliquant la situation et demande le mot de passe pour lier
+    const errEl = document.getElementById('authError');
+    errEl.style.color = 'var(--accent)';
+    errEl.textContent = '';
+    errEl.classList.add('show');
+
+    const msg = document.createElement('div');
+    msg.innerHTML = '<b>Ce compte existe déjà via e-mail/mot de passe.</b><br>'
+                  + 'Entrez votre mot de passe pour lier les deux méthodes de connexion.';
+    msg.style.cssText = 'font-size:0.82rem;margin-bottom:8px';
+
+    const pwInput = document.getElementById('authPassword');
+    const emailInput = document.getElementById('authEmail');
+    emailInput.value = email;
+
+    // Remplacer temporairement le bouton submit
+    const submitBtn = document.getElementById('authSubmitBtn');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Lier les comptes';
+
+    const originalOnclick = submitBtn.getAttribute('onclick');
+    submitBtn.setAttribute('onclick', '');
+    submitBtn.onclick = async () => {
+        const { fbAuth, signInWithEmailAndPassword, linkWithPopup, GoogleAuthProvider } = window._fb;
+        const pw = pwInput.value;
+        if (!pw) { showAuthError('Entrez votre mot de passe.'); return; }
+        try {
+            // 1. Se connecter avec email/password
+            const cred = await signInWithEmailAndPassword(fbAuth, email, pw);
+            // 2. Lier le compte Google
+            const provider2 = new GoogleAuthProvider();
+            provider2.setCustomParameters({ prompt: 'select_account' });
+            await linkWithPopup(cred.user, provider2);
+            showToast('✅ Compte Google lié ! Connexion unifiée activée.');
+            // Restaurer le bouton
+            submitBtn.textContent = originalText;
+            submitBtn.setAttribute('onclick', originalOnclick);
+            submitBtn.onclick = null;
+        } catch(e) {
+            showAuthError('Erreur liaison : ' + e.message);
+        }
+    };
+
+    errEl.innerHTML = '';
+    errEl.appendChild(msg);
 }
 
 async function forgotPassword() {
@@ -1348,10 +1724,20 @@ async function forgotPassword() {
     }
 }
 
+function showLoginScreen() {
+    document.getElementById('loginBtn').style.display = 'none';
+    document.getElementById('authScreen').style.display = 'flex';
+}
+
 async function signOutUser() {
     const { fbAuth, signOut } = window._fb;
     if (!confirm('Se déconnecter ?')) return;
+    _intentionalSignOut = true;
     if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    // Détacher tous les listeners d'espaces locaux
+    Object.values(_localSpaceListeners).forEach(unsub => { try { unsub(); } catch {} });
+    _localSpaceListeners = {};
+    currentSpaceId = null;
     currentUser = null;
     await signOut(fbAuth);
     showToast('👋 Déconnecté');
@@ -1376,45 +1762,83 @@ function closeShareModal(e) {
 }
 
 async function loadSharedSpaces() {
-    const { fbDb, collection, query, where, getDocs } = window._fb;
     const list = document.getElementById('sharedSpacesList');
     list.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:8px 0">Chargement…</div>';
-    try {
-        const q    = query(collection(fbDb, 'shared'), where('members', 'array-contains', currentUser.uid));
-        const snap = await getDocs(q);
+    let html = '';
 
-        let html = '';
+    // ── Espace personnel principal (toujours visible) ──────────────────────
+    const personalName = _getPersonalName();
+    const personalActive = !currentSpaceId;
+    // Lire le vrai compteur depuis localStorage (state peut contenir un autre espace)
+    const _personalData = (() => {
+        if (personalActive) return state; // on est dans les notes perso → state est bon
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+    })();
+    const personalCount = (_personalData.notes || []).length;
+    html += '<div class="shared-space-item" style="' + (personalActive ? 'border-color:#2ecc71' : '') + '" onclick="switchToSpace(null,null)">'
+         +  '<span style="font-size:1.1rem">👤</span>'
+         +  '<div style="flex:1">'
+         +    '<div style="font-weight:600;font-size:0.9rem">' + escHtml(personalName)
+         +      (personalActive ? ' <span style="color:#2ecc71;font-size:0.72rem">· Actif</span>' : '') + '</div>'
+         +    '<div style="font-size:0.72rem;color:var(--text-muted)">' + personalCount + ' note(s) · principal</div>'
+         +  '</div>'
+         +  '<button class="nact-btn" onclick="event.stopPropagation();renamePersonalSpace()" title="Renommer">✏️</button>'
+         +  '</div>';
 
-        // Bouton retour aux notes perso (si dans un espace)
-        if (currentSpaceId) {
-            html += `<div class="shared-space-item" style="border-color:#2ecc71;margin-bottom:6px" onclick="switchToSpace(null,null)">
-                <span style="font-size:1.1rem">👤</span>
-                <div style="flex:1"><div style="font-weight:600;font-size:0.9rem">Mes notes personnelles</div>
-                <div style="font-size:0.72rem;color:var(--text-muted)">Revenir à mes notes</div></div>
-            </div>`;
-        }
-
-        if (snap.empty && !currentSpaceId) {
-            html += '<div style="color:var(--text-muted);font-size:0.85rem;padding:4px 0 12px">Aucun espace partagé pour l\'instant.</div>';
-        } else {
-            snap.docs.forEach(d => {
-                const data     = d.data();
-                const isActive = currentSpaceId === d.id;
-                html += `<div class="shared-space-item${isActive ? '" style="border-color:var(--accent)' : ''}" onclick="switchToSpace('${d.id}','${escHtml(data.name||'Espace')}')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    <div style="flex:1">
-                        <div style="font-weight:600;font-size:0.9rem">${escHtml(data.name||'Sans nom')}</div>
-                        <div style="font-size:0.72rem;color:var(--text-muted)">${(data.members||[]).length} membre(s)${isActive ? ' · <span style="color:var(--accent)">Actif</span>' : ''}</div>
-                    </div>
-                    <button class="nact-btn" onclick="event.stopPropagation();openSpaceDetail('${d.id}','${escHtml(data.name||'Espace')}')" title="Gérer">⚙️</button>
-                </div>`;
-            });
-        }
-
-        list.innerHTML = html;
-    } catch(e) {
-        list.innerHTML = `<div style="color:var(--danger);font-size:0.85rem">Erreur : ${e.message}</div>`;
+    // Espaces locaux
+    const localSpaces = _getLocalSpaces();
+    if (localSpaces.length) {
+        html += '<div style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px">Espaces locaux</div>';
+        localSpaces.forEach(sp => {
+            const isActive  = currentSpaceId === sp.id;
+            const lk        = STORAGE_KEY + '_' + sp.id;
+            const localData = (() => { try { return JSON.parse(localStorage.getItem(lk) || '{}'); } catch { return {}; } })();
+            const count     = (localData.notes || []).length;
+            const border    = isActive ? 'border-color:#9b59b6' : '';
+            const activeLbl = isActive ? ' <span style="color:#9b59b6;font-size:0.72rem">· Actif</span>' : '';
+            html += '<div class="shared-space-item" style="' + border + '" onclick="switchToLocalSpace(\'' + sp.id + '\')">'  
+                 +  '<span style="font-size:1rem">📁</span>'
+                 +  '<div style="flex:1">'
+                 +    '<div style="font-weight:600;font-size:0.9rem">' + escHtml(sp.name) + activeLbl + '</div>'
+                 +    '<div style="font-size:0.72rem;color:var(--text-muted)">' + count + ' note(s) · local</div>'
+                 +  '</div>'
+                 +  '<button class="nact-btn" onclick="event.stopPropagation();renameLocalSpace(\'' + sp.id + '\')" title="Renommer">✏️</button>' 
+                 +  '<button class="nact-btn" onclick="event.stopPropagation();promoteLocalSpace(\'' + sp.id + '\')" title="Partager en ligne">☁️</button>' 
+                 +  '<button class="nact-btn danger" onclick="event.stopPropagation();deleteLocalSpace(\'' + sp.id + '\')" title="Supprimer">✕</button>' 
+                 +  '</div>';
+        });
     }
+
+    // Espaces Firebase
+    if (currentUser && window._fb) {
+        try {
+            const { fbDb, collection, query, where, getDocs } = window._fb;
+            const q    = query(collection(fbDb, 'shared'), where('members', 'array-contains', currentUser.uid));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+                html += '<div style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">Espaces partagés</div>';
+                snap.docs.forEach(d => {
+                    const data     = d.data();
+                    const isActive = currentSpaceId === d.id;
+                    const border2  = isActive ? 'border-color:var(--accent)' : '';
+                    const act2     = isActive ? ' · <span style="color:var(--accent)">Actif</span>' : '';
+                    html += '<div class="shared-space-item" style="' + border2 + '" onclick="switchToSpace(\'' + d.id + '\',\'' + escHtml(data.name||'Espace') + '\')">' 
+                         +  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
+                         +  '<div style="flex:1">'
+                         +    '<div style="font-weight:600;font-size:0.9rem">' + escHtml(data.name||'Sans nom') + '</div>'
+                         +    '<div style="font-size:0.72rem;color:var(--text-muted)">' + (data.members||[]).length + ' membre(s)' + act2 + '</div>'
+                         +  '</div>'
+                         +  '<button class="nact-btn" onclick="event.stopPropagation();openSpaceDetail(\'' + d.id + '\',\'' + escHtml(data.name||'Espace') + '\')" title="Gérer">⚙️</button>' 
+                         +  '</div>';
+                });
+            }
+        } catch(e) {
+            html += '<div style="color:var(--danger);font-size:0.78rem;margin:4px 0">Erreur Firebase : ' + e.message + '</div>';
+        }
+    }
+
+    if (!html) html = '<div style="color:var(--text-muted);font-size:0.85rem;padding:4px 0">Aucun espace.</div>';
+    list.innerHTML = html;
 }
 
 async function createSharedSpace() {
@@ -1442,6 +1866,144 @@ async function createSharedSpace() {
         await openSpaceDetail(spaceId, name);
     } catch(e) {
         errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block';
+    }
+}
+
+function switchToLocalSpace(spaceId) {
+    const spaces = _getLocalSpaces();
+    const sp = spaces.find(s => s.id === spaceId);
+    if (!sp) return;
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    currentSpaceId = spaceId;
+    document.getElementById('shareOverlay').classList.remove('show');
+    state = { notes: [], archived: [], today: [], collections: [], currentCollection: null };
+    loadLocal();
+    renderNotes();
+    renderCollDisplay();
+    const av = document.getElementById('userAvatar');
+    if (av) av.style.background = 'linear-gradient(135deg,#9b59b6,#8e44ad)';
+    showToast(`📁 Espace « ${sp.name} » actif`);
+    if (currentUser && window._fb) {
+        setSyncDot('syncing');
+        _subscribeLocalSpace(spaceId);
+        // Uploader le contenu local vers Firebase (garantit la sync même si notes créées offline)
+        _forceSyncSingleLocalSpace(spaceId);
+    } else {
+        setSyncDot('offline');
+    }
+}
+
+// Upload forcé d'un seul espace local vers Firebase
+async function _forceSyncSingleLocalSpace(spaceId) {
+    if (!currentUser || !window._fb) return;
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    try {
+        const cacheKey  = STORAGE_KEY + '_' + spaceId;
+        const rawLocal  = localStorage.getItem(cacheKey);
+        if (!rawLocal) return;
+        const localData = JSON.parse(rawLocal);
+        // Uploader TOUJOURS le contenu local → Firebase (source de vérité = l'appareil actif)
+        const ref = doc(fbDb, 'users', currentUser.uid, 'localSpaces', spaceId);
+        await setDoc(ref, {
+            spaceId:           spaceId,
+            notes:             localData.notes             || [],
+            archived:          localData.archived          || [],
+            today:             localData.today             || [],
+            collections:       localData.collections       || [],
+            currentCollection: localData.currentCollection || null,
+            updatedAt:         serverTimestamp()
+        });
+        console.log('[Sync] Force-upload espace', spaceId, (localData.notes||[]).length, 'notes');
+    } catch(e) {
+        console.warn('[Sync] _forceSyncSingleLocalSpace error:', e.message);
+    }
+}
+
+function createLocalSpace() {
+    const input = document.getElementById('localSpaceNameInput');
+    const name  = input ? input.value.trim() : '';
+    if (!name) { showToast("⚠️ Donnez un nom à l'espace"); return; }
+    const spaceId = 'local_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const spaces  = _getLocalSpaces();
+    spaces.push({ id: spaceId, name, createdAt: Date.now() });
+    _saveLocalSpaces(spaces);
+    localStorage.setItem(`${STORAGE_KEY}_${spaceId}`, JSON.stringify({
+        notes: [], archived: [], today: [], collections: [], currentCollection: null
+    }));
+    if (input) input.value = '';
+    showToast(`📁 Espace « ${name} » créé`);
+    _onLocalSpaceChanged();
+}
+
+function renamePersonalSpace() {
+    const current = _getPersonalName();
+    const newName = prompt('Renommer cet espace :', current);
+    if (!newName || !newName.trim() || newName.trim() === current) return;
+    _setPersonalName(newName.trim());
+    showToast('✏️ Renommé en « ' + newName.trim() + ' »');
+    loadSharedSpaces();
+}
+
+function renameLocalSpace(spaceId) {
+    const spaces = _getLocalSpaces();
+    const sp     = spaces.find(s => s.id === spaceId);
+    if (!sp) return;
+    const newName = prompt("Renommer l'espace :", sp.name);
+    if (!newName || !newName.trim() || newName.trim() === sp.name) return;
+    sp.name = newName.trim();
+    _saveLocalSpaces(spaces);
+    showToast(`✏️ Renommé en « ${sp.name} »`);
+    _onLocalSpaceChanged();
+}
+
+function deleteLocalSpace(spaceId) {
+    const spaces = _getLocalSpaces();
+    const sp     = spaces.find(s => s.id === spaceId);
+    if (!sp) return;
+    if (!confirm(`Supprimer l'espace « ${sp.name} » et toutes ses notes ?`)) return;
+    const newSpaces = spaces.filter(s => s.id !== spaceId);
+    _saveLocalSpaces(newSpaces);
+    localStorage.removeItem(`${STORAGE_KEY}_${spaceId}`);
+    // Supprimer aussi dans Firebase si connecté
+    if (currentUser && window._fb) {
+        const { fbDb, doc, deleteDoc } = window._fb;
+        deleteDoc(doc(fbDb, 'users', currentUser.uid, 'localSpaces', spaceId)).catch(() => {});
+    }
+    if (currentSpaceId === spaceId) switchToSpace(null, null);
+    showToast(`🗑 Espace « ${sp.name} » supprimé`);
+    _onLocalSpaceChanged();
+}
+
+async function promoteLocalSpace(spaceId) {
+    // Convertir un espace local en espace Firebase partagé
+    if (!currentUser) { showToast("⚠️ Connectez-vous d'abord"); return; }
+    const spaces = _getLocalSpaces();
+    const sp     = spaces.find(s => s.id === spaceId);
+    if (!sp) return;
+    if (!confirm(`Partager « ${sp.name} » en ligne ?\nSes données seront envoyées sur Firebase.`)) return;
+
+    const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+    const localData = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_${spaceId}`) || '{}');
+    try {
+        const newId = 'space_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        await setDoc(doc(fbDb, 'shared', newId), {
+            name: sp.name, members: [currentUser.uid],
+            createdBy: currentUser.uid, createdAt: serverTimestamp()
+        });
+        await setDoc(doc(fbDb, 'shared', newId, 'data', 'main'), {
+            notes: localData.notes || [], archived: localData.archived || [],
+            today: localData.today || [], collections: localData.collections || [],
+            updatedAt: serverTimestamp()
+        });
+        // Supprimer l'espace local
+        const newSpaces = spaces.filter(s => s.id !== spaceId);
+        _saveLocalSpaces(newSpaces);
+        localStorage.removeItem(`${STORAGE_KEY}_${spaceId}`);
+        if (currentSpaceId === spaceId) switchToSpace(newId, sp.name);
+        showToast(`✅ « ${sp.name} » partagé en ligne !`);
+        loadSharedSpaces();
+    } catch(e) {
+        showToast('❌ Erreur : ' + e.message);
     }
 }
 
@@ -1764,18 +2326,18 @@ function openEditor(id, fromArchive = false) {
     editingNoteId = id;
     const ov = document.getElementById('editorOverlay');
     
+    editingFromArchive = fromArchive;
     if (id) {
         const pool = fromArchive ? (state.archived || []) : (state.notes || []);
         const n = pool.find(x => x.id === id);
         if (!n) return;
-        // Snapshot avant édition (une seule fois à l'ouverture)
-        if (!fromArchive) snapshotState('Édition : ' + (n.title || 'Sans titre'));
+        snapshotState('Édition : ' + (n.title || 'Sans titre'));
         document.getElementById('editorTitle').value = n.title || '';
         currentColor = n.color || NOTE_COLORS[0];
         paragraphs = n.body ? n.body.split('\n\n---PARA_SEP---\n\n') : [''];
-        // Les notes archivées s'ouvrent en lecture seule
-        document.getElementById('editorTitle').readOnly = fromArchive;
-        document.querySelector('.editor-toolbar').style.display = fromArchive ? 'none' : '';
+        // Notes archivées : éditables comme les actives
+        document.getElementById('editorTitle').readOnly = false;
+        document.querySelector('.editor-toolbar').style.display = '';
     } else {
         document.getElementById('editorTitle').readOnly = false;
         document.querySelector('.editor-toolbar').style.display = '';
@@ -1862,7 +2424,6 @@ function addParagraph() {
 }
 
 function closeEditor() {
-    if (isRecording) toggleMic();
     // Flush la sauvegarde en cours si timer actif
     clearTimeout(autoSaveTimer);
     autoSaveTimer = null;
@@ -1935,7 +2496,8 @@ function autoSave() {
         const body = paragraphs.join('\n\n---PARA_SEP---\n\n');
 
         if (editingNoteId) {
-            const n = state.notes.find(x => x.id === editingNoteId);
+            const pool = editingFromArchive ? (state.archived || []) : state.notes;
+            const n = pool.find(x => x.id === editingNoteId);
             if (n) { n.title = title; n.body = body; n.color = currentColor; n.updatedAt = Date.now(); }
         } else {
             // Première sauvegarde d'une nouvelle note : on crée l'entrée et on retient son id
@@ -2014,8 +2576,9 @@ function openGpsModalForNote(id, fromArchive = false) {
 function openGpsModal() {
     if (editingNoteId) {
         gpsCurrentNoteId = editingNoteId;
-        gpsFromArchive   = false;
-        const n = state.notes.find(x => x.id === editingNoteId);
+        gpsFromArchive   = editingFromArchive;
+        const pool = editingFromArchive ? (state.archived || []) : state.notes;
+        const n = pool.find(x => x.id === editingNoteId);
         const addrs = n?.addresses || (n?.address ? [n.address] : []);
         _openGpsModal(addrs, n?.addressNote || '', n?.phones || []);
     } else {
@@ -2058,13 +2621,14 @@ function _getCurrentAddresses() {
     return JSON.parse(JSON.stringify(n.addresses || []));
 }
 
-function _saveAddresses(addresses) {
+function _saveAddresses(addresses, ikDistances) {
     if (!gpsCurrentNoteId) return;
     const pool = gpsFromArchive ? (state.archived || []) : state.notes;
     const n = pool.find(x => x.id === gpsCurrentNoteId);
     if (!n) return;
     n.addresses = addresses;
     n.address   = addresses[0] || '';
+    if (ikDistances !== undefined) n.ikDistances = ikDistances;
     n.updatedAt = Date.now();
     save();
     renderNotes();
@@ -2073,19 +2637,42 @@ function _saveAddresses(addresses) {
 
 function _renderAddressList(addresses) {
     const list = document.getElementById('gpsAddressList');
-    if (!addresses.length) { list.innerHTML = ''; return; }
-    list.innerHTML = addresses.map((addr, i) => `
-        <div class="address-row" id="addrRow_${i}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                <circle cx="12" cy="9" r="2.5"/>
-            </svg>
-            <span class="address-row-text" title="${escHtml(addr)}">${escHtml(addr)}</span>
-            <button class="address-nav-btn" onclick="launchNavigationTo(${i})">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-            </button>
-            <button class="phone-delete-btn" onclick="deleteAddress(${i})" title="Supprimer">✕</button>
-        </div>`).join('');
+    if (!list) return;
+    if (!addresses || !addresses.length) { list.innerHTML = ''; return; }
+
+    const pool = gpsCurrentNoteId ? (gpsFromArchive ? (state.archived||[]) : state.notes) : [];
+    const n    = pool.find ? pool.find(x => x.id === gpsCurrentNoteId) : null;
+    const iks  = n?.ikDistances || [];
+
+    // Event delegation pour les boutons refresh (évite les problèmes de closure)
+    list.onclick = (e) => {
+        const btn = e.target.closest('[data-refresh-idx]');
+        if (btn) refreshIK(parseInt(btn.dataset.refreshIdx));
+    };
+    list.innerHTML = addresses.map((addr, i) => {
+        const ik = iks[i];
+        const refreshBtn = `<button data-refresh-idx="${i}" title="Recalculer" style="background:none;border:none;cursor:pointer;padding:0 2px;color:var(--text-muted);vertical-align:middle;line-height:1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>`;
+        const ikHtml = ik === 'loading'
+            ? `<div style="font-size:0.72rem;color:var(--text-muted);margin:2px 0 5px 20px">Calcul en cours\u2026 ${refreshBtn}</div>`
+            : ik === 'no_pro'
+                ? `<div style="font-size:0.72rem;color:var(--text-muted);margin:2px 0 5px 20px">⚙️ Configurez une adresse pro ${refreshBtn}</div>`
+                : (ik !== undefined && ik !== null)
+                ? `<div style="font-size:0.72rem;color:var(--accent);margin:2px 0 5px 20px;font-weight:600">Distance A/R = ${ik}\u00a0km ${refreshBtn}</div>`
+                : `<div style="font-size:0.72rem;color:var(--text-muted);margin:2px 0 5px 20px">IK non calcul\xe9 ${refreshBtn}</div>`;
+        return `<div id="addrRow_${i}"><div class="address-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="address-row-text" title="${escHtml(addr)}">${escHtml(addr)}</span><button class="address-nav-btn" onclick="launchNavigationTo(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button><button class="phone-delete-btn" onclick="deleteAddress(${i})" title="Supprimer">\u2715</button></div>${ikHtml}</div>`;
+    }).join('');
+}
+
+function refreshIK(idx) {
+    if (!gpsCurrentNoteId) return;
+    const pool = gpsFromArchive ? (state.archived||[]) : state.notes;
+    const n    = pool.find(x => x.id === gpsCurrentNoteId);
+    if (!n || !n.addresses || !n.addresses[idx]) return;
+    if (!n.ikDistances) n.ikDistances = [];
+    n.ikDistances[idx] = 'loading';
+    save();
+    _renderAddressList(n.addresses);
+    _computeIK(n.addresses[idx], idx);
 }
 
 function showGpsSearchField() {
@@ -2105,23 +2692,220 @@ function hideGpsSearchField() {
     if (sug) { sug.style.display = 'none'; sug.innerHTML = ''; }
     clearTimeout(nominatimTimer);
 }
-
 function addAddressToList(addr) {
     if (!addr || !addr.trim()) return;
     const addresses = _getCurrentAddresses();
+    const pool      = gpsCurrentNoteId ? (gpsFromArchive ? (state.archived||[]) : state.notes) : [];
+    const n         = Array.isArray(pool) ? pool.find(x => x.id === gpsCurrentNoteId) : null;
+    const iks       = n ? JSON.parse(JSON.stringify(n.ikDistances || [])) : [];
+    const newIdx    = addresses.length;
+
     addresses.push(addr.trim());
-    _saveAddresses(addresses);
+    iks[newIdx] = 'loading';
+    _saveAddresses(addresses, iks);
     _renderAddressList(addresses);
     hideGpsSearchField();
+
+    // Calculer l'IK en arrière-plan
+    _computeIK(addr.trim(), newIdx);
 }
 
 function deleteAddress(idx) {
     const addresses = _getCurrentAddresses();
+    const pool = gpsCurrentNoteId ? (gpsFromArchive ? (state.archived||[]) : state.notes) : [];
+    const n    = Array.isArray(pool) ? pool.find(x => x.id === gpsCurrentNoteId) : null;
+    const iks  = n ? JSON.parse(JSON.stringify(n.ikDistances || [])) : [];
     addresses.splice(idx, 1);
-    _saveAddresses(addresses);
+    iks.splice(idx, 1);
+    _saveAddresses(addresses, iks);
     _renderAddressList(addresses);
 }
 
+// --- Calcul IK via Nominatim + OSRM ---
+// Référence : 9 bis Route des Carrières, 23000 Saint-Léger-le-Guérétois
+// --- Adresse Pro (référence IK) ---
+const PRO_ADDRESS_KEY = 'matsNotes_proAddress';
+
+function _getProAddress() {
+    try { return JSON.parse(localStorage.getItem(PRO_ADDRESS_KEY)) || null; } catch { return null; }
+}
+
+function openProAddressModal() {
+    const pro = _getProAddress();
+    const displayEl = document.getElementById('proAddressDisplay');
+    const textEl    = document.getElementById('proAddressText');
+    const searchEl  = document.getElementById('proAddressSearchWrap');
+    if (pro) {
+        textEl.textContent = pro.address;
+        displayEl.style.display = 'block';
+        searchEl.style.display  = 'none';
+    } else {
+        displayEl.style.display = 'none';
+        searchEl.style.display  = 'block';
+    }
+    document.getElementById('proAddressInput').value = '';
+    document.getElementById('proAddressSuggestions').style.display = 'none';
+    document.getElementById('proAddressOverlay').classList.add('show');
+}
+
+function closeProAddressModal() {
+    document.getElementById('proAddressOverlay').classList.remove('show');
+    document.getElementById('proAddressSuggestions').style.display = 'none';
+    clearTimeout(_proAddressTimer);
+}
+
+function deleteProAddress() {
+    localStorage.removeItem(PRO_ADDRESS_KEY);
+    const displayEl = document.getElementById('proAddressDisplay');
+    const searchEl  = document.getElementById('proAddressSearchWrap');
+    displayEl.style.display = 'none';
+    searchEl.style.display  = 'block';
+    showToast('🏠 Adresse pro supprimée');
+}
+
+let _proAddressTimer = null;
+let _proNominatimResults = [];
+
+function onProAddressInput(value) {
+    clearTimeout(_proAddressTimer);
+    const sug = document.getElementById('proAddressSuggestions');
+    if (value.trim().length < 4) { sug.style.display = 'none'; return; }
+    _proAddressTimer = setTimeout(() => _fetchProNominatim(value.trim()), 450);
+}
+
+async function _fetchProNominatim(query) {
+    const sug = document.getElementById('proAddressSuggestions');
+    try {
+        const resp = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q=${encodeURIComponent(query)}`,
+            { headers: { 'Accept-Language': 'fr', 'User-Agent': 'MatsNotesApp/1.0' } }
+        );
+        const data = await resp.json();
+        _proNominatimResults = data.map(item => _buildCleanAddress(item));
+        if (!_proNominatimResults.length) { sug.style.display = 'none'; return; }
+        sug.innerHTML = _proNominatimResults.map((addr, i) =>
+            `<div class="gps-suggestion-item" onclick="selectProAddress(${i})">${escHtml(addr)}</div>`
+        ).join('');
+        sug.style.display = 'block';
+    } catch { sug.style.display = 'none'; }
+}
+
+async function selectProAddress(idx) {
+    const addr = _proNominatimResults[idx];
+    if (!addr) return;
+    // Géocoder pour obtenir les coordonnées
+    document.getElementById('proAddressSuggestions').style.display = 'none';
+    document.getElementById('proAddressInput').value = addr;
+    try {
+        const resp = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+            { headers: { 'Accept-Language': 'fr', 'User-Agent': 'MatsNotesApp/1.0' } }
+        );
+        const data = await resp.json();
+        if (!data.length) { showToast('⚠️ Coordonnées introuvables'); return; }
+        const pro = { address: addr, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        localStorage.setItem(PRO_ADDRESS_KEY, JSON.stringify(pro));
+        document.getElementById('proAddressText').textContent = addr;
+        document.getElementById('proAddressDisplay').style.display = 'block';
+        document.getElementById('proAddressSearchWrap').style.display = 'none';
+        showToast('🏠 Adresse pro enregistrée');
+    } catch { showToast("⚠️ Erreur lors de l'enregistrement"); }
+}
+
+// --- Calcul IK via OSRM ---
+async function _computeIK(addr, idx) {
+    const pro = _getProAddress();
+    if (!pro) {
+        if (!gpsCurrentNoteId) return;
+        const pool2 = gpsFromArchive ? (state.archived||[]) : state.notes;
+        const n2    = pool2.find(x => x.id === gpsCurrentNoteId);
+        if (n2) {
+            if (!n2.ikDistances) n2.ikDistances = [];
+            n2.ikDistances[idx] = 'no_pro';
+            save();
+            _renderAddressList(n2.addresses || []);
+        }
+        return;
+    }
+    try {
+        // 1. Géocoder l'adresse de la note via Nominatim
+        const geoResp = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+            { headers: { 'Accept-Language': 'fr', 'User-Agent': 'MatsNotesApp/1.0' } }
+        );
+        const geoData = await geoResp.json();
+        if (!geoData.length) throw new Error('Adresse introuvable');
+
+        const lat = parseFloat(geoData[0].lat);
+        const lng = parseFloat(geoData[0].lon);
+
+        // 2. OpenRouteService - profil shortest
+        let distKm = null;
+        try {
+            const orsResp = await fetch(
+                'https://api.openrouteservice.org/v2/directions/driving-car',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjQ1OWIwYWM1M2EwMzQwNTE4ZDBmMDMxYWY3NTUxYzMxIiwiaCI6Im11cm11cjY0In0=',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        coordinates: [[pro.lng, pro.lat], [lng, lat]],
+                        preference: 'shortest',
+                        units: 'km'
+                    }),
+                    signal: AbortSignal.timeout(10000)
+                }
+            );
+            const orsData = await orsResp.json();
+            if (orsData.routes?.length) {
+                distKm = orsData.routes[0].summary.distance; // déjà en km
+            }
+        } catch(orsErr) {
+            console.warn('ORS error:', orsErr.message);
+        }
+
+        // Fallback OSRM si ORS échoue
+        if (distKm === null) {
+            const r2 = await fetch(
+                `https://router.project-osrm.org/route/v1/driving/${pro.lng},${pro.lat};${lng},${lat}?overview=false&alternatives=false&steps=false`,
+                { signal: AbortSignal.timeout(8000) }
+            );
+            const d2 = await r2.json();
+            if (d2.code === 'Ok' && d2.routes?.length) {
+                distKm = d2.routes[0].distance / 1000;
+            }
+        }
+
+        if (distKm === null) throw new Error('Aucun serveur de routage disponible');
+
+        const ikValue = Math.round(distKm * 2 * 10) / 10; // Distance A/R
+
+        // 3. Sauvegarder
+        if (!gpsCurrentNoteId) return;
+        const pool2 = gpsFromArchive ? (state.archived||[]) : state.notes;
+        const n2    = pool2.find(x => x.id === gpsCurrentNoteId);
+        if (!n2) return;
+        if (!n2.ikDistances) n2.ikDistances = [];
+        n2.ikDistances[idx] = ikValue;
+        n2.updatedAt = Date.now();
+        save();
+        _renderAddressList(n2.addresses || []);
+
+    } catch(e) {
+        if (!gpsCurrentNoteId) return;
+        const pool2 = gpsFromArchive ? (state.archived||[]) : state.notes;
+        const n2    = pool2.find(x => x.id === gpsCurrentNoteId);
+        if (n2) {
+            if (!n2.ikDistances) n2.ikDistances = [];
+            n2.ikDistances[idx] = null;
+            save();
+            _renderAddressList(n2.addresses || []);
+        }
+        console.warn('IK calc error:', e.message);
+    }
+}
 function launchNavigationTo(idx) {
     const addresses = _getCurrentAddresses();
     const addr = addresses[idx];
@@ -2294,7 +3078,8 @@ function _savePhones(phones) {
 function _refreshEditorGpsBtn() {
     const btn = document.getElementById('editorGpsBtn');
     if (!btn) return;
-    const n = state.notes.find(x => x.id === editingNoteId);
+    const pool = editingFromArchive ? (state.archived || []) : state.notes;
+    const n = pool.find(x => x.id === editingNoteId);
     btn.classList.toggle('gps-active', !!(n?.address || (n?.addresses && n.addresses.length)));
     btn.title = n?.address ? `Adresse : ${n.address}` : 'Adresse / Navigation';
 }
@@ -2431,12 +3216,37 @@ function updateColorUI() {
     document.querySelector('.editor-header').style.setProperty('--note-color', currentColor);
 }
 
+function _getSortedColors() {
+    // Compter l'usage de chaque couleur dans toutes les notes (actives + archivées)
+    const allNotes = [...(state.notes || []), ...(state.archived || [])];
+    const freq = {};
+    NOTE_COLORS.forEach(c => freq[c] = 0);
+    allNotes.forEach(n => { if (n.color && freq[n.color] !== undefined) freq[n.color]++; });
+    // Trier : couleurs utilisées d'abord (desc), puis ordre original
+    return [...NOTE_COLORS].sort((a, b) => {
+        const diff = (freq[b] || 0) - (freq[a] || 0);
+        if (diff !== 0) return diff;
+        return NOTE_COLORS.indexOf(a) - NOTE_COLORS.indexOf(b);
+    });
+}
+
 function renderSwatches() {
-    const popup = document.getElementById('colorPopup');
-    popup.innerHTML = NOTE_COLORS.map(c => 
-        `<div class="swatch ${c===currentColor ? 'active':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
-    ).join('');
-    // Close when clicking outside
+    const popup  = document.getElementById('colorPopup');
+    const sorted = _getSortedColors();
+    // Séparateur visuel après les couleurs utilisées (si au moins une)
+    const allNotes = [...(state.notes || []), ...(state.archived || [])];
+    const usedSet  = new Set(allNotes.map(n => n.color).filter(Boolean));
+    const usedCount = sorted.filter(c => usedSet.has(c)).length;
+
+    popup.innerHTML = sorted.map((col, i) => {
+        const isActive = col === currentColor;
+        const divider  = (i === usedCount && usedCount > 0 && usedCount < sorted.length)
+            ? ' style="grid-column:1/-1;height:1px;background:rgba(255,255,255,0.1);margin:2px 0;pointer-events:none"'
+            : '';
+        if (divider) return `<div${divider}></div><div class="swatch ${isActive ? 'active':''}" style="background:${col}" onclick="selectColor('${col}')"></div>`;
+        return `<div class="swatch ${isActive ? 'active':''}" style="background:${col}" onclick="selectColor('${col}')"></div>`;
+    }).join('');
+
     document.body.onclick = (e) => {
         if (!e.target.closest('.color-btn')) popup.classList.remove('show');
     };
@@ -2451,7 +3261,51 @@ function selectColor(c) {
 }
 
 // --- Side Panel ---
+// ===== ARCHIVE DE SÉANCES =====
+let _spCurrentTab = 'active'; // 'active' | 'archived'
+
+function switchSpTab(tab) {
+    _spCurrentTab = tab;
+    document.getElementById('spTabActive').classList.toggle('active', tab === 'active');
+    document.getElementById('spTabArchived').classList.toggle('active', tab === 'archived');
+    updateParaList();
+}
+
+function archiveAllSessions() {
+    if (paragraphs.every(p => !p.trim())) { showToast('⚠️ Aucune séance à archiver'); return; }
+    if (!confirm('Archiver toutes les séances en cours ?\nElles seront effacées de la note active.')) return;
+
+    // Construire le titre : première ligne para[0] / première ligne para[last]
+    const first = paragraphs[0].trim().split('\n')[0] || 'Séance 1';
+    const last  = paragraphs[paragraphs.length - 1].trim().split('\n')[0] || first;
+    const title = first === last ? first : first + ' / ' + last;
+
+    const snapshot = {
+        id:         'sa_' + Date.now().toString(36),
+        title,
+        archivedAt: Date.now(),
+        paras:      [...paragraphs]
+    };
+
+    // Sauvegarder dans la note
+    const pool = editingFromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === editingNoteId);
+    if (!n) return;
+    if (!n.sessionArchives) n.sessionArchives = [];
+    n.sessionArchives.unshift(snapshot);
+
+    // Vider les paragraphes actifs
+    paragraphs = [getFormattedDate() + '\n'];
+    renderEditor();
+    save();
+    showToast('📦 Séances archivées : ' + title);
+    switchSpTab('archived');
+}
+
 function openSidePanel() {
+    _spCurrentTab = 'active';
+    document.getElementById('spTabActive').classList.add('active');
+    document.getElementById('spTabArchived').classList.remove('active');
     updateParaList();
     document.getElementById('sideOverlay').classList.add('show');
     document.getElementById('sidePanel').classList.add('show');
@@ -2463,16 +3317,70 @@ function closeSidePanel() {
 
 function updateParaList() {
     const list = document.getElementById('paraList');
-    // Ordre décroissant : séance la plus récente en premier
-    const indices = paragraphs.map((_, i) => i).reverse();
-    list.innerHTML = indices.map(i => {
-        const p = paragraphs[i];
-        const preview = p.trim().split('\n')[0] || 'Séance vide';
-        return `<div class="para-item-card" onclick="goToPara(${i})">
-            <span class="para-num">Séance ${i + 1}</span>
-            <div class="para-preview">${escHtml(preview.substring(0, 50))}</div>
-        </div>`;
-    }).join('');
+    if (_spCurrentTab === 'active') {
+        const indices = paragraphs.map((_, i) => i).reverse();
+        list.innerHTML = indices.map(i => {
+            const p = paragraphs[i];
+            const preview = p.trim().split('\n')[0] || 'Séance vide';
+            return `<div class="para-item-card" onclick="goToPara(${i})">
+                <span class="para-num">Séance ${i + 1}</span>
+                <div class="para-preview">${escHtml(preview.substring(0, 50))}</div>
+            </div>`;
+        }).join('');
+    } else {
+        // Onglet archives de séances
+        const pool = editingFromArchive ? (state.archived || []) : state.notes;
+        const n    = editingNoteId ? pool.find(x => x.id === editingNoteId) : null;
+        const archives = n?.sessionArchives || [];
+        if (!archives.length) {
+            list.innerHTML = '<div style="color:rgba(0,0,0,0.4);font-size:0.85rem;text-align:center;padding:24px 8px">Aucune archive de séances</div>';
+            return;
+        }
+        list.innerHTML = archives.map((sa, i) => {
+            const d = new Date(sa.archivedAt);
+            const dateStr = d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' });
+            const preview = sa.paras[0]?.trim().split('\n')[0] || '';
+            return `<div class="sp-archive-card" onclick="openSpArchiveView(${i})">
+                <div class="sp-archive-title">${escHtml(sa.title)}</div>
+                <div class="sp-archive-date">Archivé le ${dateStr}</div>
+                ${preview ? `<div class="sp-archive-preview">${escHtml(preview.substring(0, 60))}</div>` : ''}
+            </div>`;
+        }).join('');
+    }
+}
+
+function openSpArchiveView(archiveIdx) {
+    const pool = editingFromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === editingNoteId);
+    const sa   = n?.sessionArchives?.[archiveIdx];
+    if (!sa) return;
+
+    document.getElementById('spArchiveViewTitle').textContent = sa.title;
+    const d = new Date(sa.archivedAt);
+    document.getElementById('spArchiveViewMeta').textContent =
+        'Archivé le ' + d.toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) +
+        ' · ' + sa.paras.length + ' séance(s)';
+
+    // Afficher le texte COMPLET de chaque séance (pas de troncature)
+    document.getElementById('spArchiveViewContent').innerHTML =
+        sa.paras.map((p, i) => {
+            const text = p || '(vide)';
+            // Première ligne = titre de la séance, reste = corps
+            const lines   = text.split('\n');
+            const heading = escHtml(lines[0]);
+            const body    = escHtml(lines.slice(1).join('\n')).replace(/\n/g, '<br>');
+            return `<div style="margin-bottom:24px">
+                <div style="font-size:0.7rem;font-weight:700;color:var(--accent);margin-bottom:4px">SÉANCE ${i+1}</div>
+                ${heading ? `<div style="font-weight:600;font-size:0.9rem;color:rgba(0,0,0,0.8);margin-bottom:6px">${heading}</div>` : ''}
+                ${body    ? `<div class="sp-archive-para" style="white-space:pre-wrap">${body}</div>` : ''}
+            </div>`;
+        }).join('');
+
+    document.getElementById('spArchiveViewOverlay').classList.add('show');
+}
+
+function closeSpArchiveView() {
+    document.getElementById('spArchiveViewOverlay').classList.remove('show');
 }
 
 function goToPara(idx) {
@@ -2487,121 +3395,160 @@ function goToPara(idx) {
     }
 }
 
-// --- Voice Transcription ---
-// Stratégie : continuous: FALSE — sessions courtes qui se relancent automatiquement.
-// Chaque session produit UN SEUL résultat final. Aucun historique à gérer, zéro doublon possible.
-// recCommitted accumule les phrases finales session après session.
-// recInterim affiche ce qui est en cours de reconnaissance en temps réel.
+// ===== ENVOYER NOTE VERS UN ESPACE =====
 
-function toggleMic() {
-    if (isRecording) stopRec();
-    else startRec();
+function openSendToSpaceModal() {
+    autoSave(); // flush avant d'envoyer
+    if (!editingNoteId) { showToast("Sauvegardez la note d'abord"); return; }
+    _stsShowSpaceList();
+    document.getElementById('stsConflictBox').style.display = 'none';
+    document.getElementById('stsOverlay').classList.add('show');
+    history.pushState({ screen: 'sts' }, '');
 }
 
-function startRec() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-        return alert('Reconnaissance vocale non supportée. Utilisez Chrome.');
-    }
-
-    // Snapshot du texte déjà présent dans le paragraphe comme point de départ
-    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
-    const existing = (ta ? ta.value : paragraphs[activeParaIndex] || '').trimEnd();
-    recCommitted = existing;
-    recInterim = '';
-
-    isRecording = true;
-    document.getElementById('micBtn').classList.add('recording');
-    document.getElementById('recStatus').classList.add('active');
-
-    launchSession();
+function closeStsModal() {
+    document.getElementById('stsOverlay').classList.remove('show');
 }
 
-function launchSession() {
-    if (!isRecording) return;
+function _stsShowSpaceList() {
+    const list         = document.getElementById('stsSpaceList');
+    const localSpaces  = _getLocalSpaces();
+    const personalName = _getPersonalName();
+    list.innerHTML     = '';
 
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRec();
-
-    // continuous: FALSE — c'est la clé.
-    // Chaque session s'arrête après une phrase. Pas de cumul, pas de doublon.
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'fr-FR';
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event) => {
-        // Avec continuous:false, event.results contient au plus 1 résultat
-        // On affiche l'interim en temps réel, et on l'intègre quand isFinal
-        recInterim = '';
-        for (let i = 0; i < event.results.length; i++) {
-            const t = event.results[i][0].transcript.trim();
-            if (event.results[i].isFinal) {
-                // Phrase validée : on l'ajoute au texte commis
-                recCommitted += (recCommitted ? ' ' : '') + t;
-                recInterim = '';
-            } else {
-                recInterim = t;
-            }
-        }
-        updateTextarea();
+    const addRow = (icon, name, sub, spaceId, isCurrent) => {
+        const row = document.createElement('div');
+        row.className = 'sts-space-row' + (isCurrent ? ' space-current' : '');
+        const info = document.createElement('div');
+        info.innerHTML = '<div class="sts-space-name">' + escHtml(name)
+                       + (isCurrent ? ' <span style="color:var(--accent);font-size:0.7rem">· actuel</span>' : '')
+                       + '</div><div class="sts-space-sub">' + sub + '</div>';
+        row.insertAdjacentHTML('afterbegin', '<span style="font-size:1.1rem;flex-shrink:0">' + icon + '</span>');
+        row.appendChild(info);
+        if (!isCurrent) row.addEventListener('click', () => _stsCheckConflict(spaceId));
+        list.appendChild(row);
     };
 
-    recognition.onerror = (e) => {
-        if (e.error === 'no-speech' || e.error === 'aborted') return;
-        console.error('Erreur Speech:', e.error);
-        stopRec();
-    };
+    addRow('👤', personalName, 'Notes personnelles principales', null, !currentSpaceId);
+    localSpaces.forEach(sp =>
+        addRow('📁', sp.name, 'Espace local', sp.id, currentSpaceId === sp.id)
+    );
 
-    recognition.onend = () => {
-        recInterim = ''; // Nettoie l'interim au cas où
-        updateTextarea();
-        // Relance automatique tant que l'utilisateur n'a pas appuyé sur Stop
-        if (isRecording) {
-            setTimeout(launchSession, 100);
-        }
-    };
-
-    try {
-        recognition.start();
-    } catch(e) {
-        console.error('Erreur start:', e);
-        stopRec();
+    if (!localSpaces.length && !currentSpaceId) {
+        const tip = document.createElement('p');
+        tip.style.cssText = 'font-size:0.8rem;color:var(--text-muted);margin:4px 0 0';
+        tip.textContent   = 'Créez des espaces locaux via le menu Espaces partagés.';
+        list.appendChild(tip);
     }
 }
 
-function updateTextarea() {
-    // Affiche : texte commis + texte interim (en cours)
-    const display = recInterim
-        ? recCommitted + (recCommitted ? ' ' : '') + recInterim
-        : recCommitted;
+function _stsCheckConflict(targetSpaceId) {
+    // Note en cours d'édition
+    const srcPool = editingFromArchive ? (state.archived || []) : state.notes;
+    const note    = srcPool.find(n => n.id === editingNoteId);
+    if (!note) return;
 
-    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
-    if (ta) {
-        ta.value = display.replace(/\s+/g, ' ').trimStart();
-        paragraphs[activeParaIndex] = ta.value;
-        autoResize(ta);
-        ta.scrollTop = ta.scrollHeight;
+    // Notes de l'espace cible
+    const targetKey   = targetSpaceId ? (STORAGE_KEY + '_' + targetSpaceId) : STORAGE_KEY;
+    const targetData  = (() => { try { return JSON.parse(localStorage.getItem(targetKey) || '{}'); } catch { return {}; } })();
+    const targetNotes = targetData.notes || [];
+
+    const titleLow    = note.title.trim().toLowerCase();
+    const existingIdx = targetNotes.findIndex(n => n.title.trim().toLowerCase() === titleLow);
+
+    if (existingIdx === -1) {
+        _stsCopyNote(note, targetSpaceId, targetKey, targetData, targetNotes, -1, 'new');
+        return;
     }
+
+    // Conflit : afficher les options
+    const existing     = targetNotes[existingIdx];
+    const srcDate      = note.updatedAt     ? new Date(note.updatedAt).toLocaleString('fr-FR')     : 'inconnue';
+    const dstDate      = existing.updatedAt ? new Date(existing.updatedAt).toLocaleString('fr-FR') : 'inconnue';
+    const newer        = note.updatedAt && existing.updatedAt
+                         ? (note.updatedAt > existing.updatedAt ? '✅ Cette version est plus récente'
+                            : note.updatedAt < existing.updatedAt ? '⚠️ La version existante est plus récente'
+                            : '↔️ Même date')
+                         : '';
+
+    const box = document.getElementById('stsConflictBox');
+    box.className = 'sts-conflict-box';
+    box.innerHTML = '';
+
+    const h4 = document.createElement('h4');
+    h4.textContent = '« ' + note.title + ' » existe déjà dans cet espace';
+    box.appendChild(h4);
+
+    const p = document.createElement('p');
+    p.innerHTML = 'Cette version : <b>' + srcDate + '</b><br>'
+                + 'Existante : <b>' + dstDate + '</b>'
+                + (newer ? '<br><span style="font-weight:600">' + newer + '</span>' : '');
+    box.appendChild(p);
+
+    const btns = document.createElement('div');
+    btns.className = 'sts-btns';
+
+    const mkBtn = (label, style, handler) => {
+        const b = document.createElement('button');
+        b.className = 'btn ' + style;
+        b.style.cssText = 'font-size:0.82rem;padding:8px 14px';
+        b.textContent = label;
+        b.addEventListener('click', handler);
+        btns.appendChild(b);
+    };
+
+    mkBtn('Écraser',        'btn-primary',   () => _stsCopyNote(note, targetSpaceId, targetKey, targetData, targetNotes, existingIdx, 'overwrite'));
+    mkBtn('Garder les deux','btn-secondary', () => _stsCopyNote(note, targetSpaceId, targetKey, targetData, targetNotes, existingIdx, 'rename'));
+    mkBtn('Annuler',        'btn-secondary', () => { box.style.display = 'none'; _stsShowSpaceList(); });
+
+    box.appendChild(btns);
+    box.style.display = 'block';
+    document.getElementById('stsSpaceList').innerHTML = ''; // masquer la liste pendant le choix
 }
 
-function stopRec() {
-    isRecording = false;
-    if (recognition) {
-        recognition.onend = null;
-        recognition.onerror = null;
-        try { recognition.stop(); } catch(e) {}
-        recognition = null;
+function _stsCopyNote(note, targetSpaceId, targetKey, targetData, targetNotes, existingIdx, mode) {
+    const copy = Object.assign({}, note, {
+        id:        'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        createdAt: note.createdAt || Date.now(),
+        updatedAt: note.updatedAt || Date.now()
+    });
+
+    if (mode === 'overwrite' && existingIdx >= 0) {
+        // Remplacer le contenu, conserver l'id existant
+        targetNotes[existingIdx] = Object.assign({}, copy, { id: targetNotes[existingIdx].id });
+    } else if (mode === 'rename') {
+        // Trouver un titre libre
+        let n = 2, t = note.title + ' (' + n + ')';
+        while (targetNotes.some(x => x.title.trim().toLowerCase() === t.trim().toLowerCase())) t = note.title + ' (' + (++n) + ')';
+        copy.title = t;
+        targetNotes.unshift(copy);
+    } else {
+        targetNotes.unshift(copy);
     }
-    // Finalise : sauvegarde le texte commis proprement (sans l'interim)
-    const ta = document.querySelector(`.paragraph-input[data-idx="${activeParaIndex}"]`);
-    if (ta) {
-        const final = recCommitted.replace(/\s+/g, ' ').trim();
-        ta.value = final;
-        paragraphs[activeParaIndex] = final;
-        autoResize(ta);
+
+    targetData.notes = targetNotes;
+    if (!targetData.archived)    targetData.archived    = [];
+    if (!targetData.today)       targetData.today       = [];
+    if (!targetData.collections) targetData.collections = [];
+
+    localStorage.setItem(targetKey, JSON.stringify(targetData));
+
+    // Sync Firebase si connecté
+    if (currentUser && window._fb) {
+        const { fbDb, doc, setDoc, serverTimestamp } = window._fb;
+        const ref = targetSpaceId
+            ? doc(fbDb, 'users', currentUser.uid, 'localSpaces', targetSpaceId)
+            : doc(fbDb, 'users', currentUser.uid, 'data', 'main');
+        setDoc(ref, Object.assign({}, targetData, { updatedAt: serverTimestamp() })).catch(() => {});
     }
-    document.getElementById('micBtn').classList.remove('recording');
-    document.getElementById('recStatus').classList.remove('active');
+
+    const spaces    = _getLocalSpaces();
+    const spaceName = targetSpaceId
+        ? (spaces.find(s => s.id === targetSpaceId)?.name || 'Espace')
+        : _getPersonalName();
+    const verb = mode === 'overwrite' ? 'mise à jour dans' : 'envoyée vers';
+    showToast('✅ Note ' + verb + ' « ' + spaceName + ' »');
+    closeStsModal();
 }
 
 // --- Recherche ---
@@ -2730,20 +3677,74 @@ function setSort(mode) {
 
 // --- Export global (JSON) ---
 function exportAllNotes() {
-    const todayCount = (state.today || []).filter(id => state.notes.some(n => n.id === id)).length;
-    const payload = {
-        version:    3,
-        exportedAt: new Date().toISOString(),
-        notes:      state.notes,
-        archived:   state.archived || [],
-        today:      state.today    || []
-    };
+    // Ouvrir la modale de sélection des espaces à exporter
+    _buildExportModal();
+    document.getElementById('exportOverlay').classList.add('show');
+}
+
+function _buildExportModal() {
+    const localSpaces = _getLocalSpaces();
+    const personalName = _getPersonalName();
+    const personalCount = (state.notes || []).length + (state.archived || []).length;
+
+    let rows = '';
+    // Espace perso principal
+    rows += '<label class="export-space-row">'
+          + '<input type="checkbox" class="export-cb" data-space="personal" checked>'
+          + '<span class="export-space-icon">👤</span>'
+          + '<div class="export-space-info">'
+          +   '<div class="export-space-name">' + escHtml(personalName) + '</div>'
+          +   '<div class="export-space-count">' + personalCount + ' note(s)</div>'
+          + '</div></label>';
+
+    // Espaces locaux
+    localSpaces.forEach(sp => {
+        const ldata = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY + '_' + sp.id) || '{}'); } catch { return {}; } })();
+        const cnt   = (ldata.notes || []).length + (ldata.archived || []).length;
+        rows += '<label class="export-space-row">'
+              + '<input type="checkbox" class="export-cb" data-space="local" data-id="' + sp.id + '" checked>'
+              + '<span class="export-space-icon">📁</span>'
+              + '<div class="export-space-info">'
+              +   '<div class="export-space-name">' + escHtml(sp.name) + '</div>'
+              +   '<div class="export-space-count">' + cnt + ' note(s)</div>'
+              + '</div></label>';
+    });
+
+    document.getElementById('exportSpaceRows').innerHTML = rows;
+}
+
+function _doExport() {
+    const cbs = document.querySelectorAll('.export-cb');
+    const localSpaces = _getLocalSpaces();
+    let payload = { version: 4, exportedAt: new Date().toISOString() };
+    let parts = [];
+
+    cbs.forEach(cb => {
+        if (!cb.checked) return;
+        if (cb.dataset.space === 'personal') {
+            payload.notes    = state.notes;
+            payload.archived = state.archived || [];
+            payload.today    = state.today    || [];
+            parts.push(_getPersonalName());
+        } else if (cb.dataset.space === 'local') {
+            const sp   = localSpaces.find(s => s.id === cb.dataset.id);
+            if (!sp) return;
+            const data = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY + '_' + sp.id) || '{}'); } catch { return {}; } })();
+            if (!payload.localSpaces) payload.localSpaces = [];
+            payload.localSpaces.push({ id: sp.id, name: sp.name, createdAt: sp.createdAt, data });
+            parts.push(sp.name);
+        }
+    });
+
+    if (!parts.length) { showToast('⚠️ Aucun espace sélectionné'); return; }
+
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'matsNotes_' + new Date().toISOString().slice(0, 10) + '.json';
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'MN_' + new Date().toISOString().slice(0, 10) + '.json';
     a.click();
-    showToast(`⬆️ ${state.notes.length} actives · ${(state.archived||[]).length} archives · ${todayCount} aujourd'hui`);
+    document.getElementById('exportOverlay').classList.remove('show');
+    showToast('⬆️ Exporté : ' + parts.join(', '));
 }
 
 // --- Import (JSON) ---
@@ -2765,10 +3766,20 @@ function importNotes(event) {
             let importedToday    = [];
 
             if (data.version >= 3 || (data.notes && data.archived !== undefined && data.today !== undefined)) {
-                // Format v3 complet (notes + archives + aujourd'hui)
                 importedNotes    = Array.isArray(data.notes)    ? data.notes    : [];
                 importedArchived = Array.isArray(data.archived) ? data.archived : [];
                 importedToday    = Array.isArray(data.today)    ? data.today    : [];
+                // Restaurer les espaces locaux si présents (v4)
+                if (Array.isArray(data.localSpaces) && data.localSpaces.length) {
+                    const existing = _getLocalSpaces();
+                    data.localSpaces.forEach(sp => {
+                        if (!existing.find(e => e.id === sp.id)) {
+                            existing.push({ id: sp.id, name: sp.name, createdAt: sp.createdAt });
+                        }
+                        localStorage.setItem(`${STORAGE_KEY}_${sp.id}`, JSON.stringify(sp.data || {}));
+                    });
+                    _saveLocalSpaces(existing);
+                }
             } else if (data.version === 2 || (data.notes && data.archived !== undefined)) {
                 // Format v2 (notes + archives, pas de today)
                 importedNotes    = Array.isArray(data.notes)    ? data.notes    : [];
@@ -2942,11 +3953,26 @@ function renderCollDisplay() {
 // --- Init ---
 document.addEventListener('DOMContentLoaded', () => {
     initPWA();
-    // load() sera appelé par onAuthChange une fois Firebase initialisé.
-    // On charge quand même le localStorage pour afficher immédiatement quelque chose.
+    // Charger immédiatement le localStorage (affichage instantané)
     loadLocal();
     renderNotes();
     renderCollDisplay();
+    // Fallback : si Firebase ne répond pas dans 4s (libs non cachées, mode avion)
+    // → forcer le mode offline avec les données locales
+    const _fbTimeout = setTimeout(() => {
+        if (currentUser === null && document.getElementById('authScreen').style.display !== 'none') {
+            const localData = localStorage.getItem(STORAGE_KEY);
+            if (localData) {
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('loginBtn').style.display = 'flex';
+                loadLocal();
+                renderNotes();
+                renderCollDisplay();
+                setSyncDot('offline');
+            }
+        }
+    }, 4000);
+    window._fbTimeoutHandle = _fbTimeout;
     renderSwatches();
     document.getElementById('sort-title')?.classList.add('active');
     updateUndoBtn();
@@ -3024,6 +4050,15 @@ function initBackButton() {
                 pushListState();
             }
             return;
+        }
+        if (document.getElementById('stsOverlay')?.classList.contains('show')) {
+            closeStsModal(); return;
+        }
+        if (document.getElementById('exportOverlay')?.classList.contains('show')) {
+            document.getElementById('exportOverlay').classList.remove('show'); return;
+        }
+        if (document.getElementById('spArchiveViewOverlay')?.classList.contains('show')) {
+            document.getElementById('spArchiveViewOverlay').classList.remove('show'); return;
         }
         if (document.getElementById('spaceDetailOverlay')?.classList.contains('show')) {
             closeSpaceDetail();
@@ -3186,8 +4221,28 @@ function confirmQuit() {
             Espaces partagés
         </div>
 
-        <!-- Liste des espaces existants -->
+        <!-- Liste de tous les espaces (locaux + partagés) -->
         <div id="sharedSpacesList" style="margin-bottom:16px"></div>
+
+        <!-- Info règles Firestore -->
+        <div id="firestoreRulesInfo" style="display:none;background:rgba(212,168,83,0.08);border:1px solid rgba(212,168,83,0.3);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:0.78rem;color:var(--text-muted)">
+            <div style="font-weight:700;color:var(--accent);margin-bottom:6px">⚠️ Règles Firestore à mettre à jour</div>
+            Dans la <b>Firebase Console → Firestore → Règles</b>, ajoutez :
+            <pre style="background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;margin:8px 0;font-size:0.72rem;overflow-x:auto;color:#e0e0e0">match /users/{uid}/localSpaces/{spaceId} {
+  allow read, write: if request.auth != null
+    &amp;&amp; request.auth.uid == uid;
+}</pre>
+            Puis rechargez l'application.
+        </div>
+
+        <!-- Créer un espace local -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
+            <label class="form-label">📁 Créer un espace personnel local</label>
+            <div style="display:flex;gap:8px">
+                <input class="form-input" id="localSpaceNameInput" placeholder="Nom (ex: Perso, Projet...)" style="flex:1">
+                <button class="btn btn-primary" onclick="createLocalSpace()" style="white-space:nowrap;background:linear-gradient(135deg,#9b59b6,#8e44ad)">Créer</button>
+            </div>
+        </div>
 
         <!-- Rejoindre via code -->
         <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">
@@ -3260,5 +4315,79 @@ function confirmQuit() {
     </div>
 </div>
 
+
+<!-- ===== MODALE ENVOYER VERS UN ESPACE ===== -->
+<div class="dialog-overlay" id="stsOverlay" onclick="if(event.target===this)closeStsModal()">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="dialog-title" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            Envoyer vers un espace
+        </div>
+        <div id="stsConflictBox" style="display:none"></div>
+        <div id="stsSpaceList"></div>
+        <div class="dialog-actions" style="margin-top:14px">
+            <button class="btn btn-secondary" onclick="closeStsModal()">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Export -->
+<div class="dialog-overlay" id="exportOverlay" onclick="if(event.target===this)document.getElementById('exportOverlay').classList.remove('show')">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:440px">
+        <div class="dialog-title" style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:1.2rem">⬆️</span> Exporter
+        </div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Choisissez les espaces à inclure dans le fichier .json :</p>
+        <div id="exportSpaceRows"></div>
+        <div style="display:flex;gap:8px;margin-top:6px;padding-top:10px;border-top:1px solid var(--border)">
+            <button class="btn btn-secondary" style="font-size:0.8rem;padding:7px 12px" onclick="document.querySelectorAll('.export-cb').forEach(cb=>cb.checked=true)">✅ Tout cocher</button>
+            <button class="btn btn-secondary" style="font-size:0.8rem;padding:7px 12px" onclick="document.querySelectorAll('.export-cb').forEach(cb=>cb.checked=false)">☐ Tout décocher</button>
+        </div>
+        <div class="dialog-actions" style="margin-top:14px">
+            <button class="btn btn-secondary" onclick="document.getElementById('exportOverlay').classList.remove('show')">Annuler</button>
+            <button class="btn btn-primary" onclick="_doExport()">⬆️ Exporter</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Adresse Pro -->
+<div class="dialog-overlay" id="proAddressOverlay" onclick="if(event.target===this)closeProAddressModal()">
+    <div class="dialog" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="dialog-title" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span style="font-size:1.2rem">🏠</span>
+            Adresse Professionnelle
+        </div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 12px">
+            Cette adresse sert de point de départ pour le calcul des IK.
+        </p>
+        <!-- Adresse enregistrée -->
+        <div id="proAddressDisplay" style="display:none;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 12px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                    <circle cx="12" cy="9" r="2.5"/>
+                </svg>
+                <span id="proAddressText" style="flex:1;font-size:0.88rem;color:var(--text)"></span>
+                <button onclick="deleteProAddress()" title="Supprimer" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:0 2px">✕</button>
+            </div>
+        </div>
+        <!-- Champ de recherche -->
+        <div id="proAddressSearchWrap">
+            <label class="form-label">Rechercher une adresse</label>
+            <div class="gps-input-wrap">
+                <input class="form-input" id="proAddressInput" type="text"
+                    placeholder="Ex : 1 rue de la Paix, Paris"
+                    autocomplete="off" autocorrect="off" spellcheck="false"
+                    oninput="onProAddressInput(this.value)">
+                <div class="gps-suggestions" id="proAddressSuggestions" style="display:none"></div>
+            </div>
+        </div>
+        <div class="dialog-actions" style="margin-top:14px">
+            <button class="btn btn-secondary" onclick="closeProAddressModal()">Fermer</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>
