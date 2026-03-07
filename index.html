@@ -283,6 +283,51 @@ onAuthStateChanged(fbAuth, user => {
     .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s; box-shadow: inset 0 1px 2px rgba(255,255,255,0.15); }
     .swatch.active { border-color: rgba(0,0,0,0.4); transform: scale(1.15); }
 
+    /* ── Modale export PDF ───────────────────────────────────────── */
+    #pdfExportOverlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        display: flex; align-items: flex-end; justify-content: center;
+        z-index: 9999; opacity: 0; visibility: hidden; transition: all 0.25s;
+    }
+    #pdfExportOverlay.show { opacity: 1; visibility: visible; }
+    #pdfExportPanel {
+        background: var(--surface); border-radius: 20px 20px 0 0;
+        width: 100%; max-width: 540px; padding: 20px 20px 32px;
+        transform: translateY(30px); transition: transform 0.25s;
+        max-height: 80vh; display: flex; flex-direction: column;
+    }
+    #pdfExportOverlay.show #pdfExportPanel { transform: translateY(0); }
+    .pdf-export-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .pdf-export-title { font-weight: 700; font-size: 1rem; }
+    .pdf-seances-list {
+        overflow-y: auto; flex: 1; margin: 10px 0;
+        display: flex; flex-direction: column; gap: 6px;
+    }
+    .pdf-seance-row {
+        display: flex; align-items: flex-start; gap: 10px;
+        background: var(--surface2); border-radius: 10px;
+        padding: 10px 12px; cursor: pointer;
+    }
+    .pdf-seance-row:hover { background: var(--border); }
+    .pdf-seance-cb { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; margin-top: 2px; cursor: pointer; }
+    .pdf-seance-preview {
+        font-size: 0.78rem; color: var(--text-muted);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+    }
+    .pdf-seance-preview strong { color: var(--text); font-size: 0.82rem; display: block; margin-bottom: 2px; }
+    .pdf-export-actions {
+        display: flex; gap: 10px; margin-top: 14px; flex-shrink: 0;
+    }
+    .pdf-export-actions button { flex: 1; padding: 12px; border-radius: 12px; border: none;
+        font-weight: 600; font-size: 0.88rem; cursor: pointer; }
+    .pdf-btn-select-all { background: var(--surface2); color: var(--text); }
+    .pdf-btn-dl { background: var(--accent); color: #fff; }
+    .pdf-btn-cancel { background: var(--surface2); color: var(--text-muted); }
+
+    /* ── Fin modale export PDF ────────────────────────────────────── */
     /* Mic Button State */
     .tool-btn:disabled { opacity: 0.3 !important; pointer-events: none; }
 
@@ -711,6 +756,7 @@ onAuthStateChanged(fbAuth, user => {
     .sts-conflict-box p  { font-size:0.78rem; color:var(--text-muted); margin:0 0 10px; line-height:1.5; }
     .sts-conflict-box .sts-btns { display:flex; gap:8px; flex-wrap:wrap; }
 </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -900,7 +946,7 @@ onAuthStateChanged(fbAuth, user => {
             </button>
             
             <!-- Other buttons -->
-            <button class="tool-btn export" onclick="exportCurrentNote()" title="Exporter">
+            <button class="tool-btn export" onclick="openPdfExport()" title="Exporter">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7,10 12,15 17,10"></polyline>
@@ -933,8 +979,8 @@ onAuthStateChanged(fbAuth, user => {
         <button class="side-panel-close" onclick="closeSidePanel()">✕</button>
     </div>
     <div class="side-panel-tabs">
-        <button class="sp-tab active" id="spTabActive" onclick="switchSpTab('active')">📝 En cours</button>
-        <button class="sp-tab" id="spTabArchived" onclick="switchSpTab('archived')">📦 Archivées</button>
+        <button class="sp-tab active" id="spTabActive" onclick="switchSpTab('active')">📝 En cours <span id="spBadgeActive" style="display:none;background:var(--accent);color:#0f0f0f;font-size:0.68rem;font-weight:800;border-radius:20px;padding:1px 6px;margin-left:3px;vertical-align:middle"></span></button>
+        <button class="sp-tab" id="spTabArchived" onclick="switchSpTab('archived')">📦 Archivées <span id="spBadgeArchived" style="display:none;background:rgba(155,89,182,0.25);color:#9b59b6;font-size:0.68rem;font-weight:800;border-radius:20px;padding:1px 6px;margin-left:3px;vertical-align:middle"></span></button>
     </div>
     <div style="padding:10px 12px 6px;border-bottom:1px solid rgba(0,0,0,0.06)">
         <button onclick="archiveAllSessions()" style="width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:10px;padding:9px 14px;color:#0f0f0f;font-family:inherit;font-size:0.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
@@ -953,7 +999,10 @@ onAuthStateChanged(fbAuth, user => {
                 <div class="sp-archive-view-title" id="spArchiveViewTitle"></div>
                 <div class="sp-archive-view-meta" id="spArchiveViewMeta"></div>
             </div>
-            <button onclick="closeSpArchiveView()" style="background:none;border:none;font-size:1.4rem;color:rgba(0,0,0,0.4);cursor:pointer;flex-shrink:0;margin-left:10px">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:10px">
+                <button onclick="openPdfExportFromArchive()" title="Exporter en PDF" style="background:var(--accent);border:none;border-radius:10px;padding:6px 12px;color:#0f0f0f;font-family:inherit;font-size:0.8rem;font-weight:700;cursor:pointer">📄 PDF</button>
+                <button onclick="closeSpArchiveView()" style="background:none;border:none;font-size:1.4rem;color:rgba(0,0,0,0.4);cursor:pointer">✕</button>
+            </div>
         </div>
         <div id="spArchiveViewContent"></div>
     </div>
@@ -3268,6 +3317,7 @@ function switchSpTab(tab) {
     _spCurrentTab = tab;
     document.getElementById('spTabActive').classList.toggle('active', tab === 'active');
     document.getElementById('spTabArchived').classList.toggle('active', tab === 'archived');
+    _updateSpBadges();
     updateParaList();
 }
 
@@ -3302,10 +3352,25 @@ function archiveAllSessions() {
     switchSpTab('archived');
 }
 
+function _updateSpBadges() {
+    // Pastille "En cours" = nombre de séances non vides
+    const activeCount = paragraphs.filter(p => p.trim()).length;
+    const ba = document.getElementById('spBadgeActive');
+    if (ba) { ba.textContent = activeCount; ba.style.display = activeCount ? 'inline-block' : 'none'; }
+
+    // Pastille "Archivées" = nombre d'archives de séances de la note
+    const pool     = editingFromArchive ? (state.archived || []) : state.notes;
+    const n        = editingNoteId ? pool.find(x => x.id === editingNoteId) : null;
+    const archCount = (n?.sessionArchives || []).length;
+    const bc = document.getElementById('spBadgeArchived');
+    if (bc) { bc.textContent = archCount; bc.style.display = archCount ? 'inline-block' : 'none'; }
+}
+
 function openSidePanel() {
     _spCurrentTab = 'active';
     document.getElementById('spTabActive').classList.add('active');
     document.getElementById('spTabArchived').classList.remove('active');
+    _updateSpBadges();
     updateParaList();
     document.getElementById('sideOverlay').classList.add('show');
     document.getElementById('sidePanel').classList.add('show');
@@ -3349,7 +3414,10 @@ function updateParaList() {
     }
 }
 
+let _currentArchiveIdx = null; // index de l'archive de séances actuellement ouverte
+
 function openSpArchiveView(archiveIdx) {
+    _currentArchiveIdx = archiveIdx; // mémoriser pour l'export PDF
     const pool = editingFromArchive ? (state.archived || []) : state.notes;
     const n    = pool.find(x => x.id === editingNoteId);
     const sa   = n?.sessionArchives?.[archiveIdx];
@@ -3381,6 +3449,43 @@ function openSpArchiveView(archiveIdx) {
 
 function closeSpArchiveView() {
     document.getElementById('spArchiveViewOverlay').classList.remove('show');
+}
+
+function openPdfExportFromArchive() {
+    if (_currentArchiveIdx === null) return;
+    const pool = editingFromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === editingNoteId);
+    const sa   = n?.sessionArchives?.[_currentArchiveIdx];
+    if (!sa) return;
+
+    const title   = sa.title || 'Archive';
+    const paras   = sa.paras || [];
+    const overlay = document.getElementById('pdfExportOverlay');
+    const list    = document.getElementById('pdfSeancesList');
+
+    document.getElementById('pdfExportNoteTitle').textContent = title;
+
+    // Ordre croissant (plus ancienne en haut), première cochée par défaut
+    list.innerHTML = paras.map((raw, i) => {
+        const lines   = (raw || '').trim().split('\n').filter(l => l.trim());
+        const heading = lines[0] || ('Séance ' + (i + 1));
+        const preview = lines.slice(1).join(' ').slice(0, 80) || '(vide)';
+        const checked = i === 0 ? 'checked' : '';
+        return `<label class="pdf-seance-row">
+            <input type="checkbox" class="pdf-seance-cb" data-idx="${i}" ${checked}>
+            <div class="pdf-seance-preview">
+                <strong>${escHtml(heading)}</strong>
+                ${escHtml(preview)}${preview.length >= 80 ? '…' : ''}
+            </div>
+        </label>`;
+    }).join('');
+
+    // Stocker les paras d'archive pour generatePdf()
+    window._pdfSourceParas = paras;
+    window._pdfSourceTitle = title;
+
+    _pdfAllSelected = false;
+    overlay.classList.add('show');
 }
 
 function goToPara(idx) {
@@ -3837,29 +3942,167 @@ function importNotes(event) {
 }
 
 // --- Export & Dialogs ---
-function exportNote(id, fromArchive = false) {
-    const pool = fromArchive ? (state.archived || []) : state.notes;
-    const n = pool.find(x => x.id === id);
-    if (!n) return;
-    const text = n.body.replace(/\n\n---PARA_SEP---\n\n/g, '\n\n───────────────────\n\n');
-    const content = n.title + '\n\n' + text;
-    // BOM UTF-8 pour garantir l'affichage correct des accents dans tous les lecteurs
-    const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = n.title.replace(/[^a-z0-9\u00C0-\u024F]/gi, '_') + '.txt';
-    a.click();
+// ── Export PDF ───────────────────────────────────────────────────────────
+let _pdfAllSelected = false;
+
+function openPdfExport() {
+    const title   = document.getElementById('editorTitle').value.trim() || 'Note';
+    const paras   = [...paragraphs]; // copie de l'état courant
+    const overlay = document.getElementById('pdfExportOverlay');
+    const list    = document.getElementById('pdfSeancesList');
+    document.getElementById('pdfExportNoteTitle').textContent = title;
+
+    // Réinitialiser la source (séances actives de l'éditeur)
+    window._pdfSourceParas = null;
+    window._pdfSourceTitle = null;
+    // Afficher séances en ordre croissant (plus ancienne en haut)
+    const indices = paras.map((_, i) => i);
+    list.innerHTML = indices.map((i, displayPos) => {
+        const raw     = paras[i] || '';
+        const lines   = raw.trim().split('\n').filter(l => l.trim());
+        const heading = lines[0] || ('Séance ' + (i + 1));
+        const preview = lines.slice(1).join(' ').slice(0, 80) || '(vide)';
+        const checked = displayPos === 0 ? 'checked' : ''; // 1ère = plus ancienne
+        return `<label class="pdf-seance-row">
+            <input type="checkbox" class="pdf-seance-cb" data-idx="${i}" ${checked}>
+            <div class="pdf-seance-preview">
+                <strong>${escHtml(heading)}</strong>
+                ${escHtml(preview)}${preview.length >= 80 ? '…' : ''}
+            </div>
+        </label>`;
+    }).join('');
+
+    _pdfAllSelected = false;
+    overlay.classList.add('show');
 }
 
-function exportCurrentNote() {
-    const title = document.getElementById('editorTitle').value.trim() || 'Note';
-    const body = paragraphs.join('\n\n───────────────────\n\n');
-    const content = title + '\n\n' + body;
-    const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = title.replace(/[^a-z0-9\u00C0-\u024F]/gi, '_') + '.txt';
-    a.click();
+function closePdfExport() {
+    document.getElementById('pdfExportOverlay').classList.remove('show');
+    window._pdfSourceParas = null;
+    window._pdfSourceTitle = null;
+}
+
+function pdfToggleAll() {
+    _pdfAllSelected = !_pdfAllSelected;
+    document.querySelectorAll('#pdfSeancesList .pdf-seance-cb').forEach(cb => {
+        cb.checked = _pdfAllSelected;
+    });
+    const btn = document.querySelector('.pdf-btn-select-all');
+    if (btn) btn.textContent = _pdfAllSelected ? 'Tout désélectionner' : 'Tout sélectionner';
+}
+
+function generatePdf() {
+    const checked = [...document.querySelectorAll('#pdfSeancesList .pdf-seance-cb:checked')];
+    if (!checked.length) { showToast('⚠️ Sélectionnez au moins une séance'); return; }
+
+    // Source : archive de séances ou séances actives de l'éditeur
+    const title       = window._pdfSourceTitle || document.getElementById('editorTitle').value.trim() || 'Note';
+    const _srcParas   = window._pdfSourceParas || paragraphs;
+    // Récupérer les index sélectionnés, triés en ordre croissant (ordre chronologique)
+    const selectedIdx = checked.map(cb => parseInt(cb.dataset.idx)).sort((a, b) => a - b);
+
+    if (!window.jspdf) { showToast('⚠️ PDF non disponible (jsPDF non chargé)'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+    const margin  = 18;
+    const pageW   = 210;
+    const pageH   = 297;
+    const maxW    = pageW - margin * 2;
+    let   y       = margin;
+
+    // ── Helpers ────────────────────────────────────────────────────────
+    function addPageIfNeeded(needed = 7) {
+        if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
+    }
+
+    function writeText(text, fontSize, fontStyle, color, lineH) {
+        doc.setFontSize(fontSize);
+        doc.setFont('helvetica', fontStyle);
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(text, maxW);
+        lines.forEach(line => {
+            addPageIfNeeded(lineH);
+            doc.text(line, margin, y);
+            y += lineH;
+        });
+    }
+
+    // ── Titre de la note ───────────────────────────────────────────────
+    writeText(title, 18, 'bold', [30, 30, 30], 9);
+    y += 4;
+
+    // Ligne décorative sous le titre
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y, pageW - margin, y);
+    y += 7;
+
+    // ── Séances sélectionnées ─────────────────────────────────────────
+    selectedIdx.forEach((idx, n) => {
+        const raw   = _srcParas[idx] || '';
+        const lines = raw.split('\n');
+
+        // En-tête de séance (1ère ligne = date/titre)
+        const heading = lines[0] || ('Séance ' + (idx + 1));
+        addPageIfNeeded(12);
+        // Badge numéro séance
+        doc.setFillColor(240, 240, 240);
+        doc.roundedRect(margin, y - 4.5, maxW, 8, 2, 2, 'F');
+        writeText(heading, 11, 'bold', [60, 60, 60], 6);
+        y += 2;
+
+        // Corps de la séance
+        const body = lines.slice(1).join('\n').trim();
+        if (body) {
+            // Découper en sous-paragraphes (doubles sauts de ligne)
+            const blocks = body.split(/\n{2,}/);
+            blocks.forEach(block => {
+                const t = block.trim();
+                if (!t) return;
+                addPageIfNeeded(7);
+                writeText(t, 10, 'normal', [50, 50, 50], 5.5);
+                y += 2;
+            });
+        }
+
+        // Séparateur entre séances
+        if (n < selectedIdx.length - 1) {
+            y += 4;
+            addPageIfNeeded(8);
+            doc.setDrawColor(210, 210, 210);
+            doc.setLineWidth(0.3);
+            doc.setLineDash([2, 2]);
+            doc.line(margin + 10, y, pageW - margin - 10, y);
+            doc.setLineDash([]);
+            y += 8;
+        }
+    });
+
+    // ── Pied de page ──────────────────────────────────────────────────
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(160, 160, 160);
+        doc.text(`${title} — ${p} / ${totalPages}`, pageW / 2, pageH - 8, { align: 'center' });
+    }
+
+    const filename = title.replace(/[^a-z0-9\u00C0-\u024F]/gi, '_') + '.pdf';
+    doc.save(filename);
+    closePdfExport();
+    showToast('📄 PDF téléchargé');
+}
+
+// Garder exportNote pour la liste (utilisé depuis les cartes note)
+function exportNote(id, fromArchive = false) {
+    const pool = fromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === id);
+    if (!n) return;
+    // Ouvrir l'éditeur puis la modale PDF
+    openEditor(id, fromArchive);
+    setTimeout(() => openPdfExport(), 200);
 }
 
 function showSaveDialog() {
@@ -4389,5 +4632,23 @@ function confirmQuit() {
         </div>
     </div>
 </div>
+
+<!-- ── Modale export PDF ─────────────────────────────────────────── -->
+<div id="pdfExportOverlay" onclick="if(event.target===this)closePdfExport()">
+    <div id="pdfExportPanel">
+        <div class="pdf-export-header">
+            <span class="pdf-export-title">📄 Exporter en PDF</span>
+            <button class="icon-btn" onclick="closePdfExport()">✕</button>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px" id="pdfExportNoteTitle"></div>
+        <div class="pdf-seances-list" id="pdfSeancesList"></div>
+        <div class="pdf-export-actions">
+            <button class="pdf-btn-select-all" onclick="pdfToggleAll()">Tout sélectionner</button>
+            <button class="pdf-btn-dl" onclick="generatePdf()">⬇ Télécharger PDF</button>
+            <button class="pdf-btn-cancel" onclick="closePdfExport()">Annuler</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
