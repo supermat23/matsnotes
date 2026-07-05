@@ -338,10 +338,11 @@ onAuthStateChanged(fbAuth, user => {
     .side-panel {
         position: fixed; top: 0; right: 0; bottom: 0; width: 85%; max-width: 320px;
         background: #faf8f5; z-index: 601;
-        transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s;
         display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+        visibility: hidden; pointer-events: none;
     }
-    .side-panel.show { transform: translateX(0); }
+    .side-panel.show { transform: translateX(0); visibility: visible; pointer-events: auto; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s; }
 
     .side-panel-header { padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
     .side-panel-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: rgba(0,0,0,0.8); }
@@ -351,8 +352,16 @@ onAuthStateChanged(fbAuth, user => {
     .side-panel-tabs { display:flex; gap:4px; padding:10px 12px 0; background:#f5f2ed; border-bottom:1px solid rgba(0,0,0,0.08); }
     .sp-tab { flex:1; padding:8px 6px; border:none; background:none; color:rgba(0,0,0,0.45); font-family:inherit; font-size:0.8rem; font-weight:600; border-bottom:2px solid transparent; cursor:pointer; transition:all 0.15s; }
     .sp-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
-    .sp-archive-card { background:white; border:1px solid rgba(212,168,83,0.3); border-radius:10px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:all 0.15s; }
+    .sp-archive-card { background:white; border:1px solid rgba(212,168,83,0.3); border-radius:10px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; gap:8px; }
     .sp-archive-card:hover { border-color:var(--accent); }
+    .sp-archive-card-content { flex:1; min-width:0; }
+    .sp-unarchive-btn {
+        flex-shrink:0; background:none; border:1px solid rgba(46,204,113,0.4); cursor:pointer;
+        color:#27ae60; font-size:0.72rem; font-weight:700;
+        padding:5px 8px; border-radius:8px; white-space:nowrap;
+        transition:all 0.15s; line-height:1.2;
+    }
+    .sp-unarchive-btn:hover { background:rgba(46,204,113,0.1); border-color:#27ae60; }
     .sp-archive-title { font-size:0.78rem; font-weight:700; color:var(--accent); margin-bottom:4px; }
     .sp-archive-date { font-size:0.68rem; color:rgba(0,0,0,0.4); margin-bottom:6px; }
     .sp-archive-preview { font-size:0.82rem; color:rgba(0,0,0,0.6); line-height:1.4; }
@@ -372,10 +381,20 @@ onAuthStateChanged(fbAuth, user => {
     .para-item-card {
         background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
         padding: 14px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
+        display: flex; align-items: center; gap: 8px;
     }
     .para-item-card:hover { border-color: var(--accent); }
+    .para-item-content { flex: 1; min-width: 0; }
     .para-num { font-size: 0.7rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
     .para-preview { font-size: 0.92rem; color: rgba(0,0,0,0.7); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .para-del-btn {
+        flex-shrink: 0; background: none; border: none; cursor: pointer;
+        color: #e53935; font-size: 1.1rem; font-weight: 700;
+        width: 28px; height: 28px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 0.15s; line-height: 1;
+    }
+    .para-del-btn:hover { background: rgba(229,57,53,0.12); }
 
     /* --- Dialogs --- */
     .dialog-overlay {
@@ -2708,8 +2727,67 @@ function _renderAddressList(addresses) {
                 : (ik !== undefined && ik !== null)
                 ? `<div style="font-size:0.72rem;color:var(--accent);margin:2px 0 5px 20px;font-weight:600">Distance A/R = ${ik}\u00a0km ${refreshBtn}</div>`
                 : `<div style="font-size:0.72rem;color:var(--text-muted);margin:2px 0 5px 20px">IK non calcul\xe9 ${refreshBtn}</div>`;
-        return `<div id="addrRow_${i}"><div class="address-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="address-row-text" title="${escHtml(addr)}">${escHtml(addr)}</span><button class="address-nav-btn" onclick="launchNavigationTo(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button><button class="phone-delete-btn" onclick="deleteAddress(${i})" title="Supprimer">\u2715</button></div>${ikHtml}</div>`;
+        return `<div id="addrRow_${i}"><div class="address-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" style="flex-shrink:0"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="address-row-text" title="${escHtml(addr)}">${escHtml(addr)}</span><button class="phone-delete-btn" onclick="editAddress(${i})" title="Modifier l'adresse" style="color:var(--text-muted);font-size:0.85rem;padding:2px 4px;margin-right:1px">✏️</button><button class="address-nav-btn" onclick="launchNavigationTo(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button><button class="phone-delete-btn" onclick="deleteAddress(${i})" title="Supprimer">✕</button></div>${ikHtml}</div>`;
     }).join('');
+}
+
+function editAddress(idx) {
+    const addresses = _getCurrentAddresses();
+    const current   = addresses[idx] || '';
+    // Afficher un champ inline sous l'adresse pour la modifier
+    const row = document.getElementById('addrRow_' + idx);
+    if (!row) return;
+    // Éviter double-édition
+    if (row.querySelector('.addr-edit-inline')) return;
+
+    const div = document.createElement('div');
+    div.className = 'addr-edit-inline';
+    div.style.cssText = 'display:flex;gap:6px;margin:6px 0 8px 0;align-items:center';
+    div.innerHTML = `
+        <input type="text" value="${escHtml(current)}"
+            autocomplete="off" autocorrect="off" spellcheck="false"
+            style="flex:1;padding:7px 10px;border-radius:9px;border:1px solid var(--accent);
+                   background:var(--surface2);color:var(--text);font-size:0.85rem;font-family:inherit"
+            onkeydown="if(event.key==='Enter')_confirmEditAddress(${idx},this.value);
+                       if(event.key==='Escape')_cancelEditAddress(${idx})">
+        <button onclick="_confirmEditAddress(${idx},this.previousElementSibling.value)"
+            style="background:var(--accent);border:none;border-radius:9px;padding:7px 12px;
+                   color:#0f0f0f;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap">OK</button>
+        <button onclick="_cancelEditAddress(${idx})"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;
+                   padding:7px 10px;color:var(--text-muted);font-size:0.82rem;cursor:pointer">✕</button>`;
+    row.appendChild(div);
+    // Focus + placer curseur au début pour faciliter l'ajout d'un numéro
+    const input = div.querySelector('input');
+    setTimeout(() => { input.focus(); input.setSelectionRange(0, 0); }, 50);
+}
+
+function _confirmEditAddress(idx, newAddr) {
+    const val = (newAddr || '').trim();
+    if (!val) return;
+    const addresses = _getCurrentAddresses();
+    const pool      = gpsCurrentNoteId ? (gpsFromArchive ? (state.archived||[]) : state.notes) : [];
+    const n         = Array.isArray(pool) ? pool.find(x => x.id === gpsCurrentNoteId) : null;
+    const iks       = n ? JSON.parse(JSON.stringify(n.ikDistances || [])) : [];
+
+    addresses[idx] = val;
+    // Recalculer l'IK si l'adresse a changé
+    if (n && n.addresses && n.addresses[idx] !== val) {
+        iks[idx] = 'loading';
+        _saveAddresses(addresses, iks);
+        _renderAddressList(addresses);
+        _computeIK(val, idx);
+    } else {
+        _saveAddresses(addresses, iks);
+        _renderAddressList(addresses);
+    }
+    showToast('✅ Adresse mise à jour');
+}
+
+function _cancelEditAddress(idx) {
+    const row = document.getElementById('addrRow_' + idx);
+    const div = row?.querySelector('.addr-edit-inline');
+    if (div) div.remove();
 }
 
 function refreshIK(idx) {
@@ -3387,9 +3465,15 @@ function updateParaList() {
         list.innerHTML = indices.map(i => {
             const p = paragraphs[i];
             const preview = p.trim().split('\n')[0] || 'Séance vide';
+            const delBtn = paragraphs.length > 1
+                ? `<button class="para-del-btn" onclick="event.stopPropagation(); deleteParaFromPanel(${i})" title="Supprimer cette séance">✕</button>`
+                : '';
             return `<div class="para-item-card" onclick="goToPara(${i})">
-                <span class="para-num">Séance ${i + 1}</span>
-                <div class="para-preview">${escHtml(preview.substring(0, 50))}</div>
+                <div class="para-item-content">
+                    <span class="para-num">Séance ${i + 1}</span>
+                    <div class="para-preview">${escHtml(preview.substring(0, 50))}</div>
+                </div>
+                ${delBtn}
             </div>`;
         }).join('');
     } else {
@@ -3406,12 +3490,50 @@ function updateParaList() {
             const dateStr = d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' });
             const preview = sa.paras[0]?.trim().split('\n')[0] || '';
             return `<div class="sp-archive-card" onclick="openSpArchiveView(${i})">
-                <div class="sp-archive-title">${escHtml(sa.title)}</div>
-                <div class="sp-archive-date">Archivé le ${dateStr}</div>
-                ${preview ? `<div class="sp-archive-preview">${escHtml(preview.substring(0, 60))}</div>` : ''}
+                <div class="sp-archive-card-content">
+                    <div class="sp-archive-title">${escHtml(sa.title)}</div>
+                    <div class="sp-archive-date">Archivé le ${dateStr} · ${sa.paras.length} séance(s)</div>
+                    ${preview ? `<div class="sp-archive-preview">${escHtml(preview.substring(0, 60))}</div>` : ''}
+                </div>
+                <button class="sp-unarchive-btn" onclick="event.stopPropagation(); unarchiveSessions(${i})" title="Restaurer dans les séances en cours">↩ Restaurer</button>
             </div>`;
         }).join('');
     }
+}
+
+function deleteParaFromPanel(idx) {
+    if (paragraphs.length <= 1) { showToast('⚠️ Impossible de supprimer la seule séance'); return; }
+    const preview = (paragraphs[idx] || '').trim().split('\n')[0] || ('Séance ' + (idx + 1));
+    const short   = preview.length > 60 ? preview.substring(0, 60) + '…' : preview;
+    if (!confirm('Supprimer cette séance ?\n\n« ' + short + ' »\n\nCette action est irréversible.')) return;
+    snapshotEditor(true);
+    paragraphs.splice(idx, 1);
+    renderEditor();
+    autoSave();
+    updateParaList();
+    _updateSpBadges();
+    showToast('🗑 Séance supprimée');
+}
+
+function unarchiveSessions(archiveIdx) {
+    const pool = editingFromArchive ? (state.archived || []) : state.notes;
+    const n    = pool.find(x => x.id === editingNoteId);
+    if (!n || !n.sessionArchives) return;
+    const sa = n.sessionArchives[archiveIdx];
+    if (!sa) return;
+    const nbParas = sa.paras.length;
+    if (!confirm('Restaurer « ' + sa.title + ' » dans les séances en cours ?\n\n' +
+        nbParas + ' séance(s) seront ajoutées avant les séances actuelles.')) return;
+    snapshotEditor(true);
+    // Insérer les séances archivées AVANT les séances en cours (index 0)
+    paragraphs = [...sa.paras, ...paragraphs];
+    n.sessionArchives.splice(archiveIdx, 1);
+    renderEditor();
+    save();
+    updateParaList();
+    _updateSpBadges();
+    showToast('↩ ' + nbParas + ' séance(s) restaurée(s)');
+    switchSpTab('active');
 }
 
 let _currentArchiveIdx = null; // index de l'archive de séances actuellement ouverte
