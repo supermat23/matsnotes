@@ -148,8 +148,18 @@ onAuthStateChanged(fbAuth, user => {
     .note-row {
         display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border);
         border-radius: var(--radius); cursor: pointer; transition: all 0.18s; overflow: hidden;
-        animation: slide-in 0.25s ease both;
     }
+    .notes-grid.animate .note-row { animation: slide-in 0.25s ease both; }
+    .note-main { flex: 1; min-width: 0; }
+    .note-presc { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
+    .fab-zone { position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: 150;
+        background: linear-gradient(to top, var(--bg) 72%, transparent); }
+    .editor-title-wrap { flex: 1; min-width: 0; position: relative; z-index: 1; }
+    .editor-presc { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 0.72rem; font-weight: 600; color: rgba(0,0,0,0.5); }
+    .editor-presc input { background: none; border: none; border-bottom: 1px dashed rgba(0,0,0,0.3); outline: none; font: inherit; color: rgba(0,0,0,0.8); padding: 0 2px; min-width: 0; }
+    .editor-presc input:focus { border-bottom-color: var(--accent); }
+    .presc-clear { background: none; border: none; color: rgba(0,0,0,0.4); cursor: pointer; font-size: 0.8rem; padding: 0 4px; display: none; }
+    .presc-clear.show { display: inline; }
     @keyframes slide-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
     .note-row:hover { border-color: var(--accent); background: var(--surface2); transform: translateX(4px); }
     
@@ -186,7 +196,7 @@ onAuthStateChanged(fbAuth, user => {
     .editor-header {
         display: flex; align-items: center; gap: 10px; padding: 10px 12px;
         background: #f5f2ed; border-bottom: 1px solid rgba(0,0,0,0.08); flex-shrink: 0;
-        height: 60px;
+        height: 74px;
         position: relative; overflow: hidden;
     }
     /* Triangle couleur coin supérieur gauche */
@@ -923,6 +933,7 @@ onAuthStateChanged(fbAuth, user => {
     <div class="notes-grid" id="notesList"></div>
 </div>
 
+<div class="fab-zone"></div>
 <button class="fab" onclick="openEditor(null)" title="Nouvelle note">+</button>
 
 <!-- Editor Overlay -->
@@ -931,6 +942,10 @@ onAuthStateChanged(fbAuth, user => {
         <button class="editor-back" onclick="closeEditor()">←</button>
         <div class="editor-title-wrap">
             <input class="editor-title-input" id="editorTitle" type="text" placeholder="Titre..." maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="on" oninput="scheduleEditorSnapshot(); autoSave()">
+            <label class="editor-presc">Prescription du
+                <input type="date" id="editorPresc" onchange="onPrescChange()">
+                <button type="button" class="presc-clear" id="prescClear" onclick="clearPresc()" title="Effacer la date">✕</button>
+            </label>
         </div>
         <div class="editor-actions">
             <div class="autosave-indicator" id="autosaveIndicator" title="Sauvegarde automatique"></div>
@@ -1371,7 +1386,14 @@ function loadLocal() {
 function load() { loadLocal(); } // compatibilité
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+var _saveTimer = null, _lastLocalIdxJson = null, _rowAnim = true;
+function saveSoon(delay = 350) { clearTimeout(_saveTimer); _saveTimer = setTimeout(save, delay); }
+function _flushSave() { if (_saveTimer) save(); }
+window.addEventListener('pagehide', _flushSave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _flushSave(); });
+
 function save() {
+    clearTimeout(_saveTimer); _saveTimer = null;
     localStorage.setItem(_storageKey(), JSON.stringify(state));
     if (currentUser && window._fb) {
         syncToFirestore();
@@ -1539,7 +1561,9 @@ function subscribeToNotes(spaceId = null) {
     renderCollDisplay();
     setSyncDot('syncing');
 
+    _lastLocalIdxJson = null;
     unsubscribeSnapshot = onSnapshot(ref, (snap) => {
+        if (snap.metadata.hasPendingWrites || _saveTimer) return; // écho de nos propres écritures : on ignore
         if (snap.exists()) {
             const d = snap.data();
             state.notes             = d.notes             || [];
@@ -1557,12 +1581,14 @@ function subscribeToNotes(spaceId = null) {
             if (!spaceId && Array.isArray(d.localSpacesIndex)) {
                 // Appel async avec await dans un contexte onSnapshot (qui n'est pas async)
                 // → on lance la promise et on rafraîchit l'UI quand elle se termine
+                const _idxJson = JSON.stringify(d.localSpacesIndex);
+                if (_idxJson !== _lastLocalIdxJson) { _lastLocalIdxJson = _idxJson;
                 _restoreLocalSpacesFromFirebase(d.localSpacesIndex).then(() => {
                     // Rafraîchir la modale espaces si elle est ouverte
                     if (document.getElementById('shareOverlay')?.classList.contains('show')) {
                         loadSharedSpaces();
                     }
-                });
+                }); }
             }
         } else {
             state.notes = []; state.archived = []; state.today = [];
@@ -1585,6 +1611,7 @@ function _subscribeLocalSpace(spaceId) {
     const ref = doc(fbDb, 'users', currentUser.uid, 'localSpaces', spaceId);
     setSyncDot('syncing');
     const unsub = onSnapshot(ref, (snap) => {
+        if (snap.metadata.hasPendingWrites || _saveTimer) return;
         if (snap.exists() && currentSpaceId === spaceId) {
             const d = snap.data();
             state.notes             = d.notes             || [];
@@ -2271,6 +2298,7 @@ function getFormattedDate() {
 }
 
 function setView(view) {
+    _rowAnim = true;
     currentView = view;
     document.getElementById('tabActive').classList.toggle('active', view === 'active');
     document.getElementById('tabArchive').classList.toggle('active', view === 'archive');
@@ -2303,8 +2331,14 @@ function sortList(list) {
     return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
+function prescLine(n) {
+    if (!n.prescription) return '';
+    const [y, m, d] = n.prescription.split('-');
+    return `<div class="note-presc">Prescription du ${d}/${m}/${y}</div>`;
+}
 function renderNotes() {
     updateBadges();
+    document.getElementById('notesList').classList.toggle('animate', _rowAnim); _rowAnim = false;
     const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
     const container = document.getElementById('notesList');
 
@@ -2321,10 +2355,10 @@ function renderNotes() {
         }
         if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
         container.innerHTML = list.map((n, i) => `
-            <div class="note-row" style="animation-delay:${i*0.05}s">
+            <div class="note-row" style="animation-delay:${Math.min(i*0.03,0.3)}s">
                 <div class="note-strip" style="background:${n.color}"></div>
                 <div class="note-row-content" onclick="openEditor('${n.id}')">
-                    <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+                    <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
                 </div>
                 <div class="note-actions">
                     <button class="nact-btn nact-up" onclick="event.stopPropagation(); moveTodayNote('${n.id}', -1)" title="Monter" ${i === 0 ? 'style="opacity:0.2;pointer-events:none"' : ''}>▲</button>
@@ -2347,10 +2381,10 @@ function renderNotes() {
         if (pool.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucune note archivée.</div></div>`; return; }
         if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
         container.innerHTML = list.map((n, i) => `
-            <div class="note-row archived" style="animation-delay:${i*0.05}s">
+            <div class="note-row archived" style="animation-delay:${Math.min(i*0.03,0.3)}s">
                 <div class="note-strip" style="background:${n.color}"></div>
                 <div class="note-row-content" onclick="openEditor('${n.id}', true)">
-                    <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+                    <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
                 </div>
                 <div class="note-actions">
                     <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}', true)" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Voir l\'adresse'}">
@@ -2372,10 +2406,10 @@ function renderNotes() {
     if (list.length === 0) { container.innerHTML = `<div class="empty-state"><div class="empty-text">Aucun résultat.</div></div>`; return; }
     container.innerHTML = list.map((n, i) => {
         const inToday = (state.today || []).includes(n.id);
-        return `<div class="note-row${inToday ? ' in-today' : ''}" style="animation-delay:${i*0.05}s">
+        return `<div class="note-row${inToday ? ' in-today' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(i*0.03,0.3)}s">
             <div class="note-strip" style="background:${n.color}"></div>
             <div class="note-row-content" onclick="openEditor('${n.id}')">
-                <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
+                <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
             </div>
             <div class="note-actions">
                 <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}')" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Ajouter une adresse'}">
@@ -2401,6 +2435,7 @@ function openEditor(id, fromArchive = false) {
         if (!n) return;
         snapshotState('Édition : ' + (n.title || 'Sans titre'));
         document.getElementById('editorTitle').value = n.title || '';
+        _setPresc(n.prescription || '');
         currentColor = n.color || NOTE_COLORS[0];
         paragraphs = n.body ? n.body.split('\n\n---PARA_SEP---\n\n') : [''];
         // Notes archivées : éditables comme les actives
@@ -2410,6 +2445,7 @@ function openEditor(id, fromArchive = false) {
         document.getElementById('editorTitle').readOnly = false;
         document.querySelector('.editor-toolbar').style.display = '';
         document.getElementById('editorTitle').value = '';
+        _setPresc('');
         currentColor = NOTE_COLORS[0];
         paragraphs = [getFormattedDate() + '\n'];
     }
@@ -2446,6 +2482,11 @@ function openEditor(id, fromArchive = false) {
     }
     // Note existante : aucun focus, aucune sélection → pas de clavier
 }
+
+function _getPresc() { return document.getElementById('editorPresc')?.value || ''; }
+function _setPresc(v) { document.getElementById('editorPresc').value = v; document.getElementById('prescClear').classList.toggle('show', !!v); }
+function onPrescChange() { _setPresc(_getPresc()); autoSave(); }
+function clearPresc() { _setPresc(''); autoSave(); }
 
 function renderEditor() {
     const body = document.getElementById('editorBody');
@@ -2499,13 +2540,13 @@ function closeEditor() {
     const body = paragraphs.join('\n\n---PARA_SEP---\n\n');
     if (editingNoteId) {
         const n = state.notes.find(x => x.id === editingNoteId);
-        if (n) { n.title = title; n.body = body; n.color = currentColor; n.updatedAt = Date.now(); }
+        if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.updatedAt = Date.now(); }
         save(); renderNotes();
     } else if (title !== 'Sans titre' || paragraphs.some(p => p.trim())) {
         // Nouvelle note non encore sauvegardée : on la crée si elle a du contenu
         snapshotState('Nouvelle note');
         const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        state.notes.unshift({ id: newId, title, body, color: currentColor, createdAt: Date.now(), updatedAt: Date.now() });
+        state.notes.unshift({ id: newId, title, body, color: currentColor, prescription: _getPresc(), createdAt: Date.now(), updatedAt: Date.now() });
         save(); renderNotes();
     }
     document.getElementById('editorOverlay').classList.remove('show');
@@ -2566,13 +2607,13 @@ function autoSave() {
         if (editingNoteId) {
             const pool = editingFromArchive ? (state.archived || []) : state.notes;
             const n = pool.find(x => x.id === editingNoteId);
-            if (n) { n.title = title; n.body = body; n.color = currentColor; n.updatedAt = Date.now(); }
+            if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.updatedAt = Date.now(); }
         } else {
             // Première sauvegarde d'une nouvelle note : on crée l'entrée et on retient son id
             const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
             editingNoteId = newId;
             state.notes.unshift({
-                id: newId, title, body, color: currentColor,
+                id: newId, title, body, color: currentColor, prescription: _getPresc(),
                 createdAt: Date.now(), updatedAt: Date.now()
             });
         }
@@ -3300,15 +3341,17 @@ function selectGpsSuggestion(idx) {
 function toggleToday(id) {
     if (!state.today) state.today = [];
     const idx = state.today.indexOf(id);
-    if (idx === -1) {
-        state.today.push(id);
-        showToast('📅 Ajouté à Aujourd\'hui');
-    } else {
-        state.today.splice(idx, 1);
-        showToast('Retiré d\'Aujourd\'hui');
-    }
-    save();
-    renderNotes();
+    const added = idx === -1;
+    if (added) state.today.push(id); else state.today.splice(idx, 1);
+    const row = currentView === 'active' ? document.querySelector(`#notesList .note-row[data-id="${id}"]`) : null;
+    if (row) { // mise à jour ciblée : pas de rechargement de toute la liste
+        row.classList.toggle('in-today', added);
+        const b = row.querySelector('.nact-today');
+        if (b) { b.style.color = added ? 'var(--accent)' : ''; b.title = added ? "Retirer d'aujourd'hui" : "Ajouter à aujourd'hui"; }
+        updateBadges();
+    } else renderNotes();
+    showToast(added ? "📅 Ajouté à Aujourd'hui" : "Retiré d'Aujourd'hui");
+    saveSoon();
 }
 
 function moveTodayNote(id, dir) {
@@ -3320,7 +3363,7 @@ function moveTodayNote(id, dir) {
     // Swap
     [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
     state.today = arr;
-    save();
+    saveSoon();
     renderNotes();
 }
 
