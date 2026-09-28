@@ -150,16 +150,22 @@ onAuthStateChanged(fbAuth, user => {
         border-radius: var(--radius); cursor: pointer; transition: all 0.18s; overflow: hidden;
     }
     .notes-grid.animate .note-row { animation: slide-in 0.25s ease both; }
-    .note-main { flex: 1; min-width: 0; }
-    .note-presc { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
     .fab-zone { position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: 150;
         background: linear-gradient(to top, var(--bg) 72%, transparent); }
     .editor-title-wrap { flex: 1; min-width: 0; position: relative; z-index: 1; }
-    .editor-presc { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 0.72rem; font-weight: 600; color: rgba(0,0,0,0.5); }
-    .editor-presc input { background: none; border: none; border-bottom: 1px dashed rgba(0,0,0,0.3); outline: none; font: inherit; color: rgba(0,0,0,0.8); padding: 0 2px; min-width: 0; }
-    .editor-presc input:focus { border-bottom-color: var(--accent); }
+    .editor-presc-bar { display: flex; align-items: center; gap: 8px; padding: 0 16px 8px 64px; margin-top: -8px; background: #f5f2ed;
+        border-bottom: 1px solid rgba(0,0,0,0.08); flex-shrink: 0; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; color: rgba(0,0,0,0.5); }
+    .presc-date-wrap { position: relative; display: inline-block; cursor: pointer; }
+    .presc-text { display: inline-block; padding: 3px 10px; border-radius: 8px; background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.8); white-space: nowrap; }
+    .presc-text.empty { color: rgba(0,0,0,0.4); font-weight: 500; }
+    .presc-date-wrap input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
     .presc-clear { background: none; border: none; color: rgba(0,0,0,0.4); cursor: pointer; font-size: 0.8rem; padding: 0 4px; display: none; }
     .presc-clear.show { display: inline; }
+    .presc-date-group { display: flex; align-items: center; gap: 8px; }
+    .presc-noneed-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; color: rgba(0,0,0,0.45); white-space: nowrap; cursor: pointer; user-select: none; }
+    .presc-noneed-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+    .note-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .note-warn { font-size: 0.72rem; font-weight: 700; color: #c0392b; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     @keyframes slide-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
     .note-row:hover { border-color: var(--accent); background: var(--surface2); transform: translateX(4px); }
     
@@ -195,8 +201,8 @@ onAuthStateChanged(fbAuth, user => {
     /* Editor Header */
     .editor-header {
         display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-        background: #f5f2ed; border-bottom: 1px solid rgba(0,0,0,0.08); flex-shrink: 0;
-        height: 74px;
+        background: #f5f2ed; flex-shrink: 0;
+        height: 60px; padding-bottom: 4px;
         position: relative; overflow: hidden;
     }
     /* Triangle couleur coin supérieur gauche */
@@ -942,10 +948,6 @@ onAuthStateChanged(fbAuth, user => {
         <button class="editor-back" onclick="closeEditor()">←</button>
         <div class="editor-title-wrap">
             <input class="editor-title-input" id="editorTitle" type="text" placeholder="Titre..." maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="on" oninput="scheduleEditorSnapshot(); autoSave()">
-            <label class="editor-presc">Prescription du
-                <input type="date" id="editorPresc" onchange="onPrescChange()">
-                <button type="button" class="presc-clear" id="prescClear" onclick="clearPresc()" title="Effacer la date">✕</button>
-            </label>
         </div>
         <div class="editor-actions">
             <div class="autosave-indicator" id="autosaveIndicator" title="Sauvegarde automatique"></div>
@@ -963,6 +965,20 @@ onAuthStateChanged(fbAuth, user => {
                 </svg>
             </button>
         </div>
+    </div>
+
+    <div class="editor-presc-bar">
+        <span>Prescription</span>
+        <span class="presc-date-group" id="prescDateGroup">
+            <span class="presc-date-wrap">
+                <span class="presc-text empty" id="prescText">Ajouter une date</span>
+                <input type="date" id="editorPresc" onchange="onPrescChange()" onclick="try{ if (this.showPicker) this.showPicker(); }catch(e){}">
+            </span>
+            <button type="button" class="presc-clear" id="prescClear" onclick="clearPresc()" title="Effacer la date">✕</button>
+        </span>
+        <label class="presc-noneed-toggle" title="Ne plus afficher de rappel pour cette fiche">
+            <input type="checkbox" id="prescNoNeed" onchange="togglePrescNoNeed()"> Sans prescription
+        </label>
     </div>
 
     <div class="editor-scroll">
@@ -2331,11 +2347,6 @@ function sortList(list) {
     return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
-function prescLine(n) {
-    if (!n.prescription) return '';
-    const [y, m, d] = n.prescription.split('-');
-    return `<div class="note-presc">Prescription du ${d}/${m}/${y}</div>`;
-}
 function renderNotes() {
     updateBadges();
     document.getElementById('notesList').classList.toggle('animate', _rowAnim); _rowAnim = false;
@@ -2358,7 +2369,7 @@ function renderNotes() {
             <div class="note-row" style="animation-delay:${Math.min(i*0.03,0.3)}s">
                 <div class="note-strip" style="background:${n.color}"></div>
                 <div class="note-row-content" onclick="openEditor('${n.id}')">
-                    <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
+                    <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescBadge(n)}</div>
                 </div>
                 <div class="note-actions">
                     <button class="nact-btn nact-up" onclick="event.stopPropagation(); moveTodayNote('${n.id}', -1)" title="Monter" ${i === 0 ? 'style="opacity:0.2;pointer-events:none"' : ''}>▲</button>
@@ -2384,7 +2395,7 @@ function renderNotes() {
             <div class="note-row archived" style="animation-delay:${Math.min(i*0.03,0.3)}s">
                 <div class="note-strip" style="background:${n.color}"></div>
                 <div class="note-row-content" onclick="openEditor('${n.id}', true)">
-                    <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
+                    <div class="note-title">${escHtml(n.title || 'Sans titre')}</div>
                 </div>
                 <div class="note-actions">
                     <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}', true)" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Voir l\'adresse'}">
@@ -2409,7 +2420,7 @@ function renderNotes() {
         return `<div class="note-row${inToday ? ' in-today' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(i*0.03,0.3)}s">
             <div class="note-strip" style="background:${n.color}"></div>
             <div class="note-row-content" onclick="openEditor('${n.id}')">
-                <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescLine(n)}</div>
+                <div class="note-main"><div class="note-title">${escHtml(n.title || 'Sans titre')}</div>${prescBadge(n)}</div>
             </div>
             <div class="note-actions">
                 <button class="nact-btn nact-gps${n.address ? ' nact-gps-active' : ''}" onclick="event.stopPropagation(); openGpsModalForNote('${n.id}')" title="${n.address ? 'Adresse : ' + escHtml(n.address) : 'Ajouter une adresse'}">
@@ -2436,6 +2447,7 @@ function openEditor(id, fromArchive = false) {
         snapshotState('Édition : ' + (n.title || 'Sans titre'));
         document.getElementById('editorTitle').value = n.title || '';
         _setPresc(n.prescription || '');
+        _setNoNeed(n.noPrescription || false);
         currentColor = n.color || NOTE_COLORS[0];
         paragraphs = n.body ? n.body.split('\n\n---PARA_SEP---\n\n') : [''];
         // Notes archivées : éditables comme les actives
@@ -2446,6 +2458,7 @@ function openEditor(id, fromArchive = false) {
         document.querySelector('.editor-toolbar').style.display = '';
         document.getElementById('editorTitle').value = '';
         _setPresc('');
+        _setNoNeed(false);
         currentColor = NOTE_COLORS[0];
         paragraphs = [getFormattedDate() + '\n'];
     }
@@ -2483,8 +2496,33 @@ function openEditor(id, fromArchive = false) {
     // Note existante : aucun focus, aucune sélection → pas de clavier
 }
 
+function prescStatus(n) {
+    if (n.noPrescription) return null;
+    if (!n.prescription) return 'Pas de prescription';
+    const d = new Date(n.prescription + 'T00:00:00');
+    if (isNaN(d)) return null;
+    const limit = new Date(); limit.setMonth(limit.getMonth() - 9);
+    if (d < limit) { const [y, m, dd] = n.prescription.split('-'); return `Prescription du ${dd}/${m}/${y}`; }
+    return null;
+}
+function prescBadge(n) {
+    const msg = prescStatus(n);
+    return msg ? `<div class="note-warn">⚠️ ${escHtml(msg)}</div>` : '';
+}
 function _getPresc() { return document.getElementById('editorPresc')?.value || ''; }
-function _setPresc(v) { document.getElementById('editorPresc').value = v; document.getElementById('prescClear').classList.toggle('show', !!v); }
+function _getNoNeed() { return !!document.getElementById('prescNoNeed')?.checked; }
+function _setNoNeed(v) {
+    document.getElementById('prescNoNeed').checked = !!v;
+    document.getElementById('prescDateGroup').style.display = v ? 'none' : 'flex';
+}
+function togglePrescNoNeed() { _setNoNeed(_getNoNeed()); autoSave(); }
+function _setPresc(v) {
+    document.getElementById('editorPresc').value = v;
+    const t = document.getElementById('prescText');
+    if (v) { const [y, m, d] = v.split('-'); t.textContent = `${d}/${m}/${y}`; t.classList.remove('empty'); }
+    else { t.textContent = 'Ajouter une date'; t.classList.add('empty'); }
+    document.getElementById('prescClear').classList.toggle('show', !!v);
+}
 function onPrescChange() { _setPresc(_getPresc()); autoSave(); }
 function clearPresc() { _setPresc(''); autoSave(); }
 
@@ -2540,13 +2578,13 @@ function closeEditor() {
     const body = paragraphs.join('\n\n---PARA_SEP---\n\n');
     if (editingNoteId) {
         const n = state.notes.find(x => x.id === editingNoteId);
-        if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.updatedAt = Date.now(); }
+        if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.noPrescription = _getNoNeed(); n.updatedAt = Date.now(); }
         save(); renderNotes();
     } else if (title !== 'Sans titre' || paragraphs.some(p => p.trim())) {
         // Nouvelle note non encore sauvegardée : on la crée si elle a du contenu
         snapshotState('Nouvelle note');
         const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        state.notes.unshift({ id: newId, title, body, color: currentColor, prescription: _getPresc(), createdAt: Date.now(), updatedAt: Date.now() });
+        state.notes.unshift({ id: newId, title, body, color: currentColor, prescription: _getPresc(), noPrescription: _getNoNeed(), createdAt: Date.now(), updatedAt: Date.now() });
         save(); renderNotes();
     }
     document.getElementById('editorOverlay').classList.remove('show');
@@ -2607,13 +2645,13 @@ function autoSave() {
         if (editingNoteId) {
             const pool = editingFromArchive ? (state.archived || []) : state.notes;
             const n = pool.find(x => x.id === editingNoteId);
-            if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.updatedAt = Date.now(); }
+            if (n) { n.title = title; n.body = body; n.color = currentColor; n.prescription = _getPresc(); n.noPrescription = _getNoNeed(); n.updatedAt = Date.now(); }
         } else {
             // Première sauvegarde d'une nouvelle note : on crée l'entrée et on retient son id
             const newId = 'n' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
             editingNoteId = newId;
             state.notes.unshift({
-                id: newId, title, body, color: currentColor, prescription: _getPresc(),
+                id: newId, title, body, color: currentColor, prescription: _getPresc(), noPrescription: _getNoNeed(),
                 createdAt: Date.now(), updatedAt: Date.now()
             });
         }
