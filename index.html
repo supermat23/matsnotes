@@ -2506,7 +2506,7 @@ function openEditor(id, fromArchive = false) {
 function fmtPresc(v) { if (!v) return ''; const [y, m, d] = v.split('-'); return `${d}/${m}/${y}`; }
 function prescStatus(n) {
     if (n.noPrescription) return null;
-    if (!n.prescription) return { type: 'none', text: 'Pas de prescription' };
+    if (!n.prescription) return { type: 'none', text: 'Pas de Prescription' };
     const d = new Date(n.prescription + 'T00:00:00');
     if (isNaN(d)) return null;
     const limit = new Date(); limit.setMonth(limit.getMonth() - 9);
