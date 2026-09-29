@@ -153,7 +153,7 @@ onAuthStateChanged(fbAuth, user => {
     .fab-zone { position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: 150;
         background: linear-gradient(to top, var(--bg) 72%, transparent); }
     .editor-title-wrap { flex: 1; min-width: 0; position: relative; z-index: 1; }
-    .editor-presc-bar { display: flex; align-items: center; gap: 8px; padding: 0 16px 8px 64px; margin-top: -8px; background: #f5f2ed;
+    .editor-presc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 16px 8px 64px; min-height: 30px; background: #f5f2ed;
         border-bottom: 1px solid rgba(0,0,0,0.08); flex-shrink: 0; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; color: rgba(0,0,0,0.5); }
     .presc-date-wrap { position: relative; display: inline-block; cursor: pointer; }
     .presc-text { display: inline-block; padding: 3px 10px; border-radius: 8px; background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.8); white-space: nowrap; }
@@ -163,9 +163,11 @@ onAuthStateChanged(fbAuth, user => {
     .presc-clear.show { display: inline; }
     .presc-date-group { display: flex; align-items: center; gap: 8px; }
     .presc-noneed-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; color: rgba(0,0,0,0.45); white-space: nowrap; cursor: pointer; user-select: none; }
-    .presc-noneed-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+    .presc-noneed-toggle input { width: 14px; height: 14px; min-height: 14px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
     .note-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .note-warn { font-size: 0.72rem; font-weight: 700; color: #c0392b; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .note-warn { font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .note-warn-old { color: #e67e22; }
+    .note-warn-none { color: #0ea5e9; }
     @keyframes slide-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
     .note-row:hover { border-color: var(--accent); background: var(--surface2); transform: translateX(4px); }
     
@@ -202,7 +204,7 @@ onAuthStateChanged(fbAuth, user => {
     .editor-header {
         display: flex; align-items: center; gap: 10px; padding: 10px 12px;
         background: #f5f2ed; flex-shrink: 0;
-        height: 60px; padding-bottom: 4px;
+        height: 60px; padding-bottom: 6px;
         position: relative; overflow: hidden;
     }
     /* Triangle couleur coin supérieur gauche */
@@ -2496,18 +2498,21 @@ function openEditor(id, fromArchive = false) {
     // Note existante : aucun focus, aucune sélection → pas de clavier
 }
 
+function fmtPresc(v) { if (!v) return ''; const [y, m, d] = v.split('-'); return `${d}/${m}/${y}`; }
 function prescStatus(n) {
     if (n.noPrescription) return null;
-    if (!n.prescription) return 'Pas de prescription';
+    if (!n.prescription) return { type: 'none', text: 'Pas de prescription' };
     const d = new Date(n.prescription + 'T00:00:00');
     if (isNaN(d)) return null;
     const limit = new Date(); limit.setMonth(limit.getMonth() - 9);
-    if (d < limit) { const [y, m, dd] = n.prescription.split('-'); return `Prescription du ${dd}/${m}/${y}`; }
+    if (d < limit) return { type: 'old', text: `Prescription du ${fmtPresc(n.prescription)}` };
     return null;
 }
 function prescBadge(n) {
-    const msg = prescStatus(n);
-    return msg ? `<div class="note-warn">⚠️ ${escHtml(msg)}</div>` : '';
+    const st = prescStatus(n);
+    if (!st) return '';
+    const icon = st.type === 'none' ? '📄' : '⚠️';
+    return `<div class="note-warn note-warn-${st.type}">${icon} ${escHtml(st.text)}</div>`;
 }
 function _getPresc() { return document.getElementById('editorPresc')?.value || ''; }
 function _getNoNeed() { return !!document.getElementById('prescNoNeed')?.checked; }
@@ -3489,19 +3494,24 @@ function archiveAllSessions() {
     const last  = paragraphs[paragraphs.length - 1].trim().split('\n')[0] || first;
     const title = first === last ? first : first + ' / ' + last;
 
-    const snapshot = {
-        id:         'sa_' + Date.now().toString(36),
-        title,
-        archivedAt: Date.now(),
-        paras:      [...paragraphs]
-    };
-
     // Sauvegarder dans la note
     const pool = editingFromArchive ? (state.archived || []) : state.notes;
     const n    = pool.find(x => x.id === editingNoteId);
     if (!n) return;
+
+    const snapshot = {
+        id:         'sa_' + Date.now().toString(36),
+        title,
+        archivedAt: Date.now(),
+        prescription: n.prescription || '', // la prescription en cours part avec les séances archivées
+        paras:      [...paragraphs]
+    };
     if (!n.sessionArchives) n.sessionArchives = [];
     n.sessionArchives.unshift(snapshot);
+
+    // La fiche reprend avec une prescription vide
+    n.prescription = '';
+    _setPresc('');
 
     // Vider les paragraphes actifs
     paragraphs = [getFormattedDate() + '\n'];
@@ -3573,7 +3583,7 @@ function updateParaList() {
             return `<div class="sp-archive-card" onclick="openSpArchiveView(${i})">
                 <div class="sp-archive-card-content">
                     <div class="sp-archive-title">${escHtml(sa.title)}</div>
-                    <div class="sp-archive-date">Archivé le ${dateStr} · ${sa.paras.length} séance(s)</div>
+                    <div class="sp-archive-date">Archivé le ${dateStr} · ${sa.paras.length} séance(s)${sa.prescription ? ' · Prescription du ' + fmtPresc(sa.prescription) : ''}</div>
                     ${preview ? `<div class="sp-archive-preview">${escHtml(preview.substring(0, 60))}</div>` : ''}
                 </div>
                 <button class="sp-unarchive-btn" onclick="event.stopPropagation(); unarchiveSessions(${i})" title="Restaurer dans les séances en cours">↩ Restaurer</button>
@@ -3608,6 +3618,11 @@ function unarchiveSessions(archiveIdx) {
     snapshotEditor(true);
     // Insérer les séances archivées AVANT les séances en cours (index 0)
     paragraphs = [...sa.paras, ...paragraphs];
+    // Garder la prescription la plus récente entre celle en cours et celle des séances restaurées
+    if (sa.prescription && (!n.prescription || sa.prescription > n.prescription)) {
+        n.prescription = sa.prescription;
+        _setPresc(n.prescription);
+    }
     n.sessionArchives.splice(archiveIdx, 1);
     renderEditor();
     save();
@@ -3630,7 +3645,7 @@ function openSpArchiveView(archiveIdx) {
     const d = new Date(sa.archivedAt);
     document.getElementById('spArchiveViewMeta').textContent =
         'Archivé le ' + d.toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) +
-        ' · ' + sa.paras.length + ' séance(s)';
+        ' · ' + sa.paras.length + ' séance(s)' + (sa.prescription ? ' · Prescription du ' + fmtPresc(sa.prescription) : '');
 
     // Afficher le texte COMPLET de chaque séance (pas de troncature)
     document.getElementById('spArchiveViewContent').innerHTML =
