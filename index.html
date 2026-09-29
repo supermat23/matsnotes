@@ -162,8 +162,12 @@ onAuthStateChanged(fbAuth, user => {
     .presc-clear { background: none; border: none; color: rgba(0,0,0,0.4); cursor: pointer; font-size: 0.8rem; padding: 0 4px; display: none; }
     .presc-clear.show { display: inline; }
     .presc-date-group { display: flex; align-items: center; gap: 8px; }
-    .presc-noneed-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; color: rgba(0,0,0,0.45); white-space: nowrap; cursor: pointer; user-select: none; }
-    .presc-noneed-toggle input { width: 14px; height: 14px; min-height: 14px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+    .presc-switch { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+    .presc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; width: 34px; height: 18px; cursor: pointer; }
+    .presc-switch-track { width: 34px; height: 18px; border-radius: 999px; background: rgba(0,0,0,0.2); position: relative; transition: background 0.18s; flex-shrink: 0; }
+    .presc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.18s; }
+    .presc-switch input:checked ~ .presc-switch-track { background: var(--accent); }
+    .presc-switch input:checked ~ .presc-switch-track .presc-switch-thumb { transform: translateX(16px); }
     .note-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .note-warn { font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .note-warn-old { color: #e67e22; }
@@ -970,6 +974,10 @@ onAuthStateChanged(fbAuth, user => {
     </div>
 
     <div class="editor-presc-bar">
+        <label class="presc-switch" title="Désactiver si cette fiche n'a pas de prescription">
+            <input type="checkbox" id="prescNoNeed" checked onchange="togglePrescNoNeed()">
+            <span class="presc-switch-track"><span class="presc-switch-thumb"></span></span>
+        </label>
         <span>Prescription</span>
         <span class="presc-date-group" id="prescDateGroup">
             <span class="presc-date-wrap">
@@ -978,9 +986,6 @@ onAuthStateChanged(fbAuth, user => {
             </span>
             <button type="button" class="presc-clear" id="prescClear" onclick="clearPresc()" title="Effacer la date">✕</button>
         </span>
-        <label class="presc-noneed-toggle" title="Ne plus afficher de rappel pour cette fiche">
-            <input type="checkbox" id="prescNoNeed" onchange="togglePrescNoNeed()"> Sans prescription
-        </label>
     </div>
 
     <div class="editor-scroll">
@@ -2515,9 +2520,9 @@ function prescBadge(n) {
     return `<div class="note-warn note-warn-${st.type}">${icon} ${escHtml(st.text)}</div>`;
 }
 function _getPresc() { return document.getElementById('editorPresc')?.value || ''; }
-function _getNoNeed() { return !!document.getElementById('prescNoNeed')?.checked; }
+function _getNoNeed() { return !document.getElementById('prescNoNeed')?.checked; }
 function _setNoNeed(v) {
-    document.getElementById('prescNoNeed').checked = !!v;
+    document.getElementById('prescNoNeed').checked = !v;
     document.getElementById('prescDateGroup').style.display = v ? 'none' : 'flex';
 }
 function togglePrescNoNeed() { _setNoNeed(_getNoNeed()); autoSave(); }
